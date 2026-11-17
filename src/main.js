@@ -242,6 +242,6 @@
     } else { S[5] += S[12]; move() }
   }
   function tick(now) { S[62] = now; step(); frame(); requestAnimationFrame(tick) }
-  if (!BENCH) { for (let i = 0; i < 4000; i++) { S[62] = i * 16.7; IM[0] = i & 1; step(); uniforms(); for (let k = 0; k < nCl; k += 97) { inFr(clF, k * 4); inCs(clF, k * 4, i % 3); leafCount(k * 4, 1); near(clF, k * 4, 500) } } S.fill(0, 5, 16); S[61] = S[62] = 0; S.set(POSES.subarray(0, 5)); IM[0] = Q.has('fly') ? 1 : 0 } // JIT warm-up
+  if (!BENCH) { for (let i = 0; i < 4000; i++) { S[62] = i * 16.7; IM[0] = i & 1; step(); uniforms(); for (let k = 0; k < nCl; k += 97) { inFr(clF, k * 4); inCs(clF, k * 4, i % 3); leafCount(k * 4, 1); near(clF, k * 4, 500) } } S.fill(0, 5, 9); S.fill(0, 12, 16); S[61] = S[62] = 0; S.set(POSES.subarray(0, 5)); IM[0] = Q.has('fly') ? 1 : 0 } // JIT warm-up
   requestAnimationFrame(tick);
 })();
