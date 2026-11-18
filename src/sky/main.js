@@ -1,14 +1,9 @@
-// ---------- renderer + runtime
-(async () => {
-  const Q = new URLSearchParams(location.search), cv = document.getElementById('c'), hud = document.getElementById('h');
-  const die = m => { hud.textContent = m; throw Error(m) };
-  if (!navigator.gpu) die('This scene needs WebGPU.');
-  const ad = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); if (!ad) die('No WebGPU adapter found.');
-  const BENCH = Q.has('bench'), CAP = Q.has('cap'), TSQ = (BENCH || Q.has('ts')) && ad.features.has('timestamp-query');
-  const dev = await ad.requestDevice({ requiredFeatures: TSQ ? ['timestamp-query'] : [] }), q = dev.queue;
-  dev.onuncapturederror = e => console.error('GPU: ' + e.error.message);
-  const ctx = cv.getContext('webgpu'), FMT = navigator.gpu.getPreferredCanvasFormat();
-  ctx.configure({ device: dev, format: FMT });
+// ---------- renderer + runtime (H = shared host: device, canvas, portal; ID = this world's index)
+const main = async (H, ID) => {
+  const Q = H.Q, cv = H.cv, ad = H.ad, dev = H.dev, q = dev.queue, ctx = H.ctx, FMT = H.FMT, on = () => H.cur === ID, PU = H.PU[ID];
+  const hud = { set textContent(s) { H.say(s, ID) }, style: {} };
+  const BENCH = Q.has('bench') && H.first === ID, CAP = Q.has('cap') && H.first === ID, TSQ = (BENCH || Q.has('ts')) && H.TS;
+  await new Promise(r => setTimeout(r));
   const tg = performance.now(), W = genWorld(), N2M = genN2(512), N3D = genN3(64);
   console.log('gen ms ' + (performance.now() - tg | 0) + ' verts ' + W.M.nv + ' tris ' + W.M.ni / 3 + ' clusters ' + W.cl.d.length / 8 + ' ferns ' + W.pl.d.length / 8 + ' tufts ' + W.tu.d.length / 8 + ' vines ' + W.vi.d.length / 12);
 
@@ -64,7 +59,7 @@
   };
   const NBL = 6; let WD = 0, HT = 0, BGm, BGres, BGrays, BGrayb, BGfin; const T = {}, BGb = [];
   function resize() {
-    WD = cv.width; HT = cv.height; const hw = (WD + 1) >> 1, hh = (HT + 1) >> 1, RT = TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING;
+    const hw = (WD + 1) >> 1, hh = (HT + 1) >> 1, RT = TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING;
     for (const k in T) T[k].destroy();
     const tx = (k, w, h, format, sampleCount = 1, mipLevelCount = 1) => T[k] = dev.createTexture({ size: [w, h], format, sampleCount, mipLevelCount, usage: RT });
     const mc = tx('mc', WD, HT, 'rgba16float', 4).createView(), md = tx('md', WD, HT, 'depth32float', 4).createView(), hd = tx('hd', WD, HT, 'rgba16float').createView(), ld = tx('ld', WD, HT, 'r16float').createView();
@@ -80,8 +75,8 @@
     for (let i = 0; i < NBL; i++) { const p = i ? P.bd : P.bd0; PD.bl.push({ colorAttachments: [{ view: bv[i], loadOp: 'clear', storeOp: 'store' }] }); BGb.push(bg(p.getBindGroupLayout(0), [[0, i ? bv[i - 1] : hd], [1, SL]])) }
     for (let i = NBL - 2; i >= 0; i--) { PD.bl.push({ colorAttachments: [{ view: bv[i], loadOp: 'load', storeOp: 'store' }] }); BGb.push(bg(P.bu.getBindGroupLayout(0), [[0, bv[i + 1]], [1, SL]])) }
   }
-  const fit = () => { cv.width = +Q.get('w') || max(1, round(cv.clientWidth * devicePixelRatio)); cv.height = +Q.get('h') || max(1, round(cv.clientHeight * devicePixelRatio)); resize() };
-  fit(); if (!Q.get('w')) addEventListener('resize', fit);
+  const fit = () => { WD = +Q.get('w') || max(1, round(cv.clientWidth * devicePixelRatio)); HT = +Q.get('h') || max(1, round(cv.clientHeight * devicePixelRatio)); if (on()) { cv.width = WD; cv.height = HT } resize() };
+  fit(); if (!Q.get('w')) addEventListener('resize', () => { if (on()) fit() });
 
   // ---------- per-frame state: everything numeric lives in typed arrays (no allocation while running)
   const S = new Float64Array(64), IM = new Int32Array(8), K = new Uint8Array(256), QS = [null];
@@ -130,7 +125,7 @@
   function camBasis() { const cy = cos(S[3]), sy = sin(S[3]), cp = cos(S[4]), sp = sin(S[4]); S[16] = sy * cp; S[17] = sp; S[18] = -cy * cp; S[19] = cy; S[20] = 0; S[21] = sy; S[22] = -sy * sp; S[23] = cp; S[24] = cy * sp }
   function move() {
     const dt = S[12]; S[3] += S[13] * .0022; S[4] = clamp(S[4] - S[14] * .0022, -1.55, 1.55); S[13] = S[14] = 0; camBasis();
-    const sp = K[16] ? 280 : 50, f = K[87] - K[83], r = K[68] - K[65], u = K[81] - K[69], k = 1 - exp(-dt * 5);
+    const sp = K[16] ? 280 : 50, f = K[87] - K[83], r = K[68] - K[65], u = K[69] - K[81], k = 1 - exp(-dt * 5);
     S[6] += ((S[16] * f + S[19] * r) * sp - S[6]) * k; S[7] += ((S[17] * f + u) * sp - S[7]) * k; S[8] += ((S[18] * f + S[21] * r) * sp - S[8]) * k;
     S[0] += S[6] * dt; S[1] = clamp(S[1] + S[7] * dt, -780, 1550); S[2] += S[8] * dt;
     const rr = sqrt(S[0] * S[0] + S[2] * S[2]); if (rr > 3200) { S[0] *= 3200 / rr; S[2] *= 3200 / rr }
@@ -168,6 +163,8 @@
     }
     UB[64] = px; UB[65] = py; UB[66] = pz; UB[67] = S[5]; UB[68] = LB[6]; UB[69] = LB[7]; UB[70] = LB[8]; UB[72] = WD; UB[73] = HT; UB[74] = 1 / WD; UB[75] = 1 / HT;
     UB[80] = S[19] * tx; UB[81] = S[20] * tx; UB[82] = S[21] * tx; UB[84] = S[22] * ty; UB[85] = S[23] * ty; UB[86] = S[24] * ty; UB[88] = Fx; UB[89] = Fy; UB[90] = Fz; UB[92] = NEAR; UB[93] = FOGK; UB[94] = 2 * ty / HT;
+    for (let i = 0; i < 16; i++) PU[i] = UB[i];
+    PU[16] = px; PU[17] = py; PU[18] = pz; PU[19] = S[5]; PU[63] = IM[0];
   }
   function inFr(A, o) { const x = A[o], y = A[o + 1], z = A[o + 2], r = A[o + 3]; for (let i = 25; i < 45; i += 4)if (S[i] * x + S[i + 1] * y + S[i + 2] * z + S[i + 3] < -r) return false; return true }
   function inCs(A, o, c) { const x = A[o], y = A[o + 1], z = A[o + 2], k = 45 + c * 3, R = S[k + 2] + A[o + 3]; return abs(x * LB[0] + y * LB[1] + z * LB[2] - S[k]) < R && abs(x * LB[3] + y * LB[4] + z * LB[5] - S[k + 1]) < R }
@@ -203,12 +200,13 @@
     p.setPipeline(P.vine); p.setVertexBuffer(0, B.vii);
     for (let k = 0; k < nVi; k++)if (inFr(viF, k * 4) && near(viF, k * 4, 2800)) p.draw(50, viI[k * 4 + 1], 0, viI[k * 4]);
     p.setPipeline(P.part); p.setVertexBuffer(0, B.pai); p.draw(4, NPA);
+    H.portal(p, ID);
     p.end();
     p = e.beginRenderPass(PD.res); p.setPipeline(P.res); p.setBindGroup(0, BGres); p.draw(3); p.end();
     p = e.beginRenderPass(PD.rays); p.setPipeline(P.rays); p.setBindGroup(0, BGrays); if (!(IM[4] & 8)) p.draw(3); p.end();
     p = e.beginRenderPass(PD.rayb); p.setPipeline(P.rayb); p.setBindGroup(0, BGrayb); p.draw(3); p.end();
     for (let i = 0; i < 2 * NBL - 1; i++) { p = e.beginRenderPass(PD.bl[i]); p.setPipeline(i == 0 ? P.bd0 : i < NBL ? P.bd : P.bu); p.setBindGroup(0, BGb[i]); p.draw(3); p.end() }
-    PD.fin.colorAttachments[0].view = ctx.getCurrentTexture().createView();
+    PD.fin.colorAttachments[0].view = H.snapView || ctx.getCurrentTexture().createView();
     p = e.beginRenderPass(PD.fin); p.setPipeline(P.fin); p.setBindGroup(0, BGfin); p.draw(3); p.end();
     if (TSQ) {
       e.resolveQuerySet(qs, 0, 2, qr, 0); const b = qfree.pop(); if (b) e.copyBufferToBuffer(qr, 0, b, 0, 16);
@@ -218,19 +216,17 @@
   }
 
   // ---------- modes
-  const HELP = 'Click to fly  ·  WASD move  ·  mouse look  ·  Q / E up / down  ·  Shift boost  ·  F guided tour';
+  const HELP = 'Click to fly  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F guided tour  ·  P portal to the sea';
   if (CAP) {
     const st = () => [S[0], S[1], S[2], S[3], S[4], S[5]].map(v => +v.toFixed(2));
     window.__cap = { set(x, y, z, yaw, pit, t) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = pit; S[5] = t; frame(); return st() }, pose(i) { S.set(POSES.subarray(i * 6, i * 6 + 6)); frame(); return st() }, fly(t) { S[15] = S[5] = t; flyCam(); frame(); return st() }, png: () => cv.toDataURL(), async gpu(mask) { IM[4] = mask; let a = 0; for (let i = 0; i < 6; i++) { frame(); await q.onSubmittedWorkDone(); await new Promise(r => setTimeout(r, 30)); if (i > 1) a += S[63] } IM[4] = 0; return +(a / 4).toFixed(1) }, jpg: j => cv.toDataURL('image/jpeg', j), gs: W.gs, W, S };
     hud.textContent = ''; return;
   }
   const FT = BENCH ? new Float32Array(40000) : null; let nf = 0;
-  if (BENCH) { IM[0] = 1; S[15] = -3; hud.textContent = 'Benchmark: 60 s scripted fly-through…' } else hud.textContent = HELP;
-  cv.onclick = () => cv.requestPointerLock();
-  document.onpointerlockchange = () => { hud.style.display = document.pointerLockElement ? 'none' : '' };
-  onmousemove = e => { if (document.pointerLockElement) { S[13] += e.movementX; S[14] += e.movementY } };
-  onkeydown = e => { K[e.keyCode & 255] = 1; if (e.keyCode == 70 && !BENCH) { IM[0] ^= 1; S[6] = S[7] = S[8] = 0 } };
-  onkeyup = e => { K[e.keyCode & 255] = 0 };
+  if (BENCH) { IM[0] = 1; S[15] = -3; hud.textContent = 'Benchmark: 60 s scripted fly-through…' }
+  addEventListener('mousemove', e => { if (on() && document.pointerLockElement) { S[13] += e.movementX; S[14] += e.movementY } });
+  addEventListener('keydown', e => { if (!on()) return; K[e.keyCode & 255] = 1; if (e.keyCode == 70 && !BENCH) { IM[0] ^= 1; S[6] = S[7] = S[8] = 0 } });
+  addEventListener('keyup', e => { K[e.keyCode & 255] = 0 });
   const stat = a => { const s = Float32Array.from(a).sort(), n = s.length; let m = 0, o = 0; for (const v of s) { m += v; if (v > 16.7) o++ } return n ? { n, avg: +(m / n).toFixed(2), p50: +s[n >> 1].toFixed(2), p99: +s[min(n - 1, floor(n * .99))].toFixed(2), max: +s[n - 1].toFixed(2), over16_7: o } : null };
   function step() { // all per-frame double math lives here (JIT-warmed below) so the rAF callback itself never boxes a number
     const ms = S[62] - S[61]; S[61] = S[62]; S[12] = ms > 100 ? .1 : ms > 0 ? ms / 1000 : 0;
@@ -241,7 +237,13 @@
       S[5] = S[15] > 0 ? S[15] : 0; flyCam();
     } else { S[5] += S[12]; move() }
   }
-  function tick(now) { S[62] = now; step(); frame(); requestAnimationFrame(tick) }
-  if (!BENCH) { for (let i = 0; i < 4000; i++) { S[62] = i * 16.7; IM[0] = i & 1; step(); uniforms(); for (let k = 0; k < nCl; k += 97) { inFr(clF, k * 4); inCs(clF, k * 4, i % 3); leafCount(k * 4, 1); near(clF, k * 4, 500) } } S.fill(0, 5, 9); S.fill(0, 12, 16); S[61] = S[62] = 0; S.set(POSES.subarray(0, 5)); IM[0] = Q.has('fly') ? 1 : 0 } // JIT warm-up
-  requestAnimationFrame(tick);
-})();
+  if (!BENCH) { for (let i = 0; i < 4000; i++) { S[62] = i * 16.7; IM[0] = i & 1; step(); uniforms(); for (let k = 0; k < nCl; k += 97) { inFr(clF, k * 4); inCs(clF, k * 4, i % 3); leafCount(k * 4, 1); near(clF, k * 4, 500) } } S.fill(0, 5, 9); S.fill(0, 12, 16); S.set(POSES.subarray(0, 5)); IM[0] = Q.has('fly') && H.first === ID ? 1 : 0 } // JIT warm-up
+  S[61] = S[62] = performance.now();
+  return {
+    name: 'Aereal', help: HELP, tanY: S[10], bench: BENCH,
+    tick() { S[62] = H.T[0]; step(); frame() }, // host loop writes rAF time into H.T[0]
+    place(x, y, z, yaw, v) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = 0; IM[0] = 0; camBasis(); S[6] = S[16] * v; S[7] = S[17] * v; S[8] = S[18] * v },
+    speed: 50, enter() { if (!Q.get('w')) fit(); else { cv.width = WD; cv.height = HT } S[61] = performance.now() }, leave() { K.fill(0) },
+    snap() { H.snapView = H.peek(ID, WD, HT); frame(); H.snapView = null }
+  };
+};
