@@ -205,6 +205,79 @@ function mantaMesh() {
   m.nrm(0, 0); return m;
 }
 
+// ---- reef creatures (uv.w material: 11 shell, 12 turtle skin, 13 whale shark, 14 tinted skin, 15 anemone, 16 jelly)
+function turtleMesh() { // forward +z; uv.y = flipper weight
+  const m = new Mesh(), NA = 20, NR = 6;
+  for (const top of [1, 0]) {
+    const v0 = m.v.length / 10;
+    for (let j = 0; j <= NR; j++)for (let k = 0; k < NA; k++) { const r = j / NR, a = k / NA * 6.2832, e = Math.sqrt(Math.max(0, 1 - r * r)), sn = Math.sin(a); m.vx(Math.cos(a) * r * .36, top ? .2 * Math.pow(e, .7) : -.05 * Math.pow(e, .5), sn * r * .5 * (sn > 0 ? .95 : 1.05), 0, 1, 0, 0, 0, top, 11); }
+    for (let j = 0; j < NR; j++)for (let k = 0; k < NA; k++) { const a = v0 + j * NA + k, b = v0 + j * NA + (k + 1) % NA; m.quad(a, a + NA, b + NA, b); }
+  }
+  tube(m, [[0, .02, .4], [0, .04, .55], [0, .05, .66]], [.075, .08, .06], 7, () => [0, 0, 0, 12], true);
+  const fl = (s, P, W, x0, x1) => { const b = m.v.length / 10; P.forEach((p, k) => { const d = nz(sub(P[Math.min(k + 1, P.length - 1)], P[Math.max(k - 1, 0)])), o = [-d[2] * W[k], 0, d[0] * W[k]]; for (const q of [add(p, o), sub(p, o)]) m.vx(s * q[0], q[1], q[2], 0, 1, 0, 0, cl((q[0] - x0) / (x1 - x0), 0, 1), 0, 12); if (k) m.quad(b + k * 2 - 2, b + k * 2 - 1, b + k * 2 + 1, b + k * 2); }); };
+  for (const s of [-1, 1]) { fl(s, [[.26, 0, .26], [.6, -.02, .22], [.95, -.04, .04]], [.1, .09, .025], .28, .95); fl(s, [[.22, -.01, -.36], [.36, -.02, -.46], [.48, -.03, -.52]], [.08, .06, .025], .24, .48); }
+  m.nrm(0, 0); return m;
+}
+function jellyMesh(r) { // bell (uv.z 0) + tentacles and oral arms (uv.z 1, uv.y along, uv.x phase)
+  const m = new Mesh();
+  lathe(m, [[0, .4], [.2, .38], [.34, .32], [.45, .21], [.51, .09], [.53, 0], [.49, -.03]], 24, (a, j) => 1 + (j > 3 ? .05 * Math.cos(a * 8) : 0), a => [a, 0, 0, 16]);
+  for (let k = 0; k < 16; k++) { const a = k / 16 * 6.2832 + r() * .2, L = 1.3 + 1.2 * r(), P = []; for (let j = 0; j <= 7; j++) { const t = j / 7; P.push([Math.cos(a) * .47 * (1 - t * .15), -.03 - L * t, Math.sin(a) * .47 * (1 - t * .15)]); } tube(m, P, .012, 3, j => [k * 1.3, j / 7, 1, 16]); }
+  for (let k = 0; k < 4; k++) { const a = k / 4 * 6.2832 + .4, L = .9 + .3 * r(), P = [], R = []; for (let j = 0; j <= 8; j++) { const t = j / 8; P.push([Math.cos(a) * .08 * (1 + t) + Math.sin(t * 9 + k) * .04, .05 - L * t, Math.sin(a) * .08 * (1 + t) + Math.cos(t * 9 + k) * .04]); R.push(.05 * (1 - t * .6)); } tube(m, P, R, 4, j => [k * 2.1 + .5, j / 8, 1, 16]); }
+  m.nrm(0, 0); return m;
+}
+function whaleSharkMesh() { // forward +z, ~1 long
+  const m = new Mesh(), P = [], R = [];
+  for (let k = 0; k <= 12; k++) { const s = k / 12; P.push([0, .015 * Math.sin(s * 3), -.48 + .98 * s]); R.push(.015 + .11 * Math.pow(Math.sin(Math.PI * (.06 + .9 * s)), .7)); }
+  tube(m, P, R, 10, () => [0, 0, 0, 13], true);
+  for (let k = 0; k < m.v.length; k += 10) { const z = m.v[k + 2]; m.v[k] *= 1.15 + .45 * ss(.1, .5, z); m.v[k + 1] *= .82 - .12 * ss(.2, .5, z); }
+  const f = (a, b, c) => { const i = m.v.length / 10; for (const p of [a, b, c]) m.vx(p[0], p[1], p[2], 1, 0, 0, 0, 0, 0, 13); m.tri(i, i + 1, i + 2); };
+  f([0, .03, -.45], [0, .26, -.66], [0, .05, -.53]); f([0, 0, -.45], [0, -.15, -.6], [0, -.02, -.54]);
+  f([0, .09, .05], [0, .24, -.1], [0, .08, -.17]); f([0, .06, -.28], [0, .12, -.35], [0, .04, -.37]);
+  for (const s of [-1, 1]) f([s * .12, -.05, .2], [s * .38, -.12, .02], [s * .12, -.06, .04]);
+  m.nrm(0, 0); return m;
+}
+function eelMesh() { // grows along +y out of the rock (y < 0 stays hidden); uv.z flex
+  const m = new Mesh(), P = [], R = [];
+  for (let k = 0; k <= 14; k++) { const s = k / 14; P.push([0, -1.2 + 2.2 * s, .02 * Math.sin(s * 9)]); R.push(s > .93 ? .065 : .08 + .025 * Math.sin(s * 3)); }
+  tube(m, P, R, 7, k => { const y = -1.2 + 2.2 * k / 14; return [0, k / 14, Math.pow(Math.max(0, (y + .3) / 1.3), 1.4), 14]; }, true);
+  for (let k = 0; k < m.v.length; k += 10) if (m.v[k + 1] > .7) m.v[k + 2] *= 1.3;
+  m.nrm(0, 0); return m;
+}
+function octopusMesh() { // mantle + 8 curling arms spread on the ground
+  const m = new Mesh(), I = ico(2);
+  for (const p of I.V) m.vx(p[0] * .17, .2 + p[1] * .2 + Math.max(p[1], 0) * .06, -.12 + p[2] * .22 - Math.max(p[1], 0) * .12, p[0], p[1], p[2], 0, 0, .04, 14);
+  for (const f of I.F) m.tri(f[0], f[1], f[2]);
+  for (let k = 0; k < 8; k++) {
+    const a0 = k / 8 * 6.2832 + .2, cv = (k & 1 ? 1 : -1) * (.6 + .4 * Math.sin(k * 2.3)), P = [], R = [];
+    for (let j = 0; j <= 12; j++) { const t = j / 12, a = a0 + cv * t * t * 1.6, d = .07 + .62 * t - Math.max(0, t - .75) * .4; P.push([Math.cos(a) * d, .06 + .05 * Math.sin(t * 3.14) + Math.max(0, t - .8) * .5, Math.sin(a) * d]); R.push(.055 * (1 - t) + .008); }
+    tube(m, P, R, 5, j => [k * 1.7, j / 12, Math.pow(j / 12, 1.2), 14]);
+  }
+  m.nrm(0, 0); return m;
+}
+function crabMesh() {
+  const m = new Mesh(), I = ico(1);
+  for (const p of I.V) m.vx(p[0] * .5, .1 + p[1] * .16, p[2] * .36, p[0], p[1], p[2], 0, 0, 0, 14);
+  for (const f of I.F) m.tri(f[0], f[1], f[2]);
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 4; k++) { const z = .2 - k * .14; tube(m, [[s * .4, .08, z], [s * .72, .22, z + .02 * s], [s * .95, -.05, z - .05]], [.045, .035, .015], 4, j => [k * 1.1 + (s > 0 ? 0 : 3.1), j / 2, j / 2, 14]); }
+    tube(m, [[s * .3, .1, .3], [s * .45, .14, .52], [s * .32, .12, .7]], [.06, .07, .1], 5, j => [s * 2, j / 2, j * .2, 14], true);
+  }
+  m.nrm(0, 0); return m;
+}
+function starfishMesh() { // coral material (uv.y: tip brightening)
+  const m = new Mesh(), c = m.vx(0, .12, 0, 0, 1, 0, 1, 0, 0, 4), N = 10, rim = [];
+  for (let k = 0; k < N; k++) { const a = k / N * 6.2832, r = k & 1 ? .38 : 1; rim.push(m.vx(Math.cos(a) * r, k & 1 ? .07 : .02, Math.sin(a) * r, 0, 1, 0, 1, r, 0, 4)); }
+  for (let k = 0; k < N; k++) m.tri(c, rim[(k + 1) % N], rim[k]);
+  const b = m.vx(0, 0, 0, 0, -1, 0, 1, 0, 0, 4); for (let k = 0; k < N; k++) m.tri(b, rim[k], rim[(k + 1) % N]);
+  m.nrm(0, 0); return m;
+}
+function anemoneMesh(r) { // short column + a crown of glowing-tipped tentacles (uv.y: base 0 -> tip 1)
+  const m = new Mesh();
+  lathe(m, [[0, .14], [.16, .14], [.15, .1], [.13, .02], [.15, 0]], 10, () => 1, () => [0, .1, 0, 15]);
+  for (let k = 0; k < 36; k++) { const a = k * 2.39996, rr = .03 + .13 * Math.sqrt((k + .5) / 36), L = .22 + .14 * r(), P = []; for (let j = 0; j <= 5; j++) { const t = j / 5; P.push([Math.cos(a) * (rr + t * L * .55), .13 + t * L * (1 - t * .3), Math.sin(a) * (rr + t * L * .55)]); } tube(m, P, [.02, .019, .017, .014, .01, .006], 3, j => [0, .2 + .8 * j / 5, 0, 15], true); }
+  m.nrm(0, 0); return m;
+}
+
 // ---- thick plank shell on a grid, with holes
 function shell(m, ni, nj, pf, hole, th, uvf, hint) {
   const P = [], N = [], at = (i, j) => P[cl(i, 0, ni - 1) * nj + cl(j, 0, nj - 1)];

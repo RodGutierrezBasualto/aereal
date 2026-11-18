@@ -155,6 +155,20 @@ fn anim(v:VI)->A{
   l=vec3f(l.x+off.x,l.y-dot(off,off)/(2.*max(hh,.05)),l.z+off.y);
   l+=n*(sin(t*1.9+hh*1.4+ph*3.+v.uv.x*1.5)*v.uv.z*v.ie.y);
   o.p=v.ip.xyz+l;o.n=n;o.r=o.p;
+ }else if(KIND==5u){
+  // jellyfish: bell pulses (rim contracts), tentacles trail, the whole animal drifts. ie: drift radius, pulse rate, -, phase
+  var l=v.pos;let c=pow(.5+.5*sin(v.ie.w+t*v.ie.y),2.);let al=v.uv.y;
+  if(v.uv.z<.5){let k=1.-.24*c*(1.-smoothstep(0.,.38,l.y));l=vec3f(l.x*k,l.y*(1.+.1*c),l.z*k);}
+  else{let q=t*.9+v.ie.w*3.+v.uv.x;l+=vec3f(sin(q+al*4.)*.22,c*.12,cos(q*.8+al*3.3)*.22)*al;}
+  let dr=vec3f(sin(t*.035+v.ic.w)*v.ie.x,sin(t*.13+v.ic.w*2.)*1.2,cos(t*.03+v.ic.w*1.3)*v.ie.x);
+  o.p=v.ip.xyz+dr+qrot(v.iq,l*s);o.n=qrot(v.iq,v.nrm);o.r=v.pos;
+ }else if(KIND==7u){
+  // anchored wiggle (eels, octopus, crabs): uv.z flex weight, uv.y along body, uv.x phase. ie: amplitude, rate, wave number, >0 retract / <0 sideways shuffle
+  var l=v.pos;let a=t*v.ie.y+v.ic.w+v.uv.x-v.uv.y*v.ie.z;
+  l+=vec3f(sin(a),.35*sin(a*.8+1.7),cos(a*.9+.6))*v.ie.x*v.uv.z;
+  var sh=vec3f(0.);
+  if(v.ie.w>0.){let e=.5+.5*sin(t*.19+v.ic.w);l.y-=v.ie.w*e*e;}else{sh=vec3f(sin(t*.37+v.ic.w)*-v.ie.w,0.,0.);}
+  o.p=v.ip.xyz+qrot(v.iq,l*s+sh);o.n=qrot(v.iq,v.nrm);o.r=v.pos;
  }else{
   let sp=v.ie.z;
   let ss=v.ic.w+t*sp;
@@ -167,14 +181,23 @@ fn anim(v:VI)->A{
   var l=v.pos;var n=v.nrm;
   if(KIND==2u){
    P+=rt*(v.ie.x+.5*sin(t*.31+v.ie.w))+vec3f(0.,v.ie.y+.4*sin(t*.23+v.ie.w*1.7),0.);
+   let pk=clamp(s*2.2,.35,1.);let dc=P-g.cam.xyz;let dl=length(dc);P+=dc/max(dl,.001)*(1.-smoothstep(0.,7.*pk,dl))*3.*pk; // schools part around the diver (less for small reef fish)
    let wv=.6-l.z;
    l.x+=sin(t*9.+v.ie.w-l.z*4.5)*.14*wv*wv;
+  }else if(KIND==6u){
+   let wv=.6-l.z;
+   l.x+=sin(t*1.3+v.ie.w-l.z*3.)*.07*wv*wv;
   }else{
+   if(KIND==4u){ // turtle: front flippers stroke, rear flippers paddle (uv.y = flipper weight, ie.y = stroke amount)
+    let w=v.uv.y*v.ie.y;let fp=t*1.15+v.ie.w;
+    if(l.z>0.){l.y+=sin(fp)*.42*w;l.z+=(cos(fp)*.18-.05)*w;}else{l.y+=sin(fp+1.6)*.12*w;}
+   }else{
    let a=abs(l.x);
    let fl=sin(t*1.45+v.ie.w-a*1.5);
    l.y+=fl*.34*a*a-.05*a;
    let sl=fl*.68*a*sign(l.x);
    n=normalize(vec3f(n.x-sl*n.y,n.y+sl*n.x,n.z));
+   }
    let cb=cos(v.ie.x);let sb=sin(v.ie.x);
    let r2=rt*cb+up*sb;up=up*cb-rt*sb;rt=r2;
   }
@@ -286,6 +309,9 @@ fn tpn(p:vec3f,n:vec3f,w:vec3f,s:f32)->NH{
   var tr=vec3f(.4,.42,.07)*(.45+.5*ns.a)*(.8+.2*sin(i.uv.x*11.));
   if(i.uv.y<0.){a=vec3f(.17,.15,.05);tr=vec3f(0.);}
   m.a=a*i.col.rgb;m.tr=tr*i.col.rgb;m.ao=.5+.5*clamp(i.uv.y*2.5,0.,1.);
+ }else if(mt==15u){
+  let h=i.uv.y;let a=mix(i.col.rgb*.3,i.col.rgb,h)*(.8+.4*ns.r);
+  m.a=a;m.tr=a*.8;m.s=vec2f(.4,20.);m.em=mix(i.col.rgb,vec3f(.7,1.,.9),.4)*pow(h,5.)*.9;m.ao=.4+.6*h;
  }else if(mt==10u){
   let a=vec3f(.5,.52,.45)*(.5+.7*ns.r)*(.65+.35*rib);
   m.a=mix(a,vec3f(.1,.28,.2),smoothstep(.4,.75,ns.a)*.65);m.tr=m.a*.6;m.s=vec2f(.05,8.);
@@ -303,6 +329,18 @@ fn tpn(p:vec3f,n:vec3f,w:vec3f,s:f32)->NH{
  }
  return vec4f(fog(lit(m,i.wp,v),i.wp),1.);
 }
+// jellyfish: translucent, self-lit (premultiplied alpha, drawn after the opaque scene)
+@fragment fn fs_j(i:VO)->@location(0)vec4f{
+ let v=normalize(g.cam.xyz-i.wp);var n=normalize(i.n);if(dot(n,v)<0.){n=-n;}
+ let fr=pow(1.-max(dot(n,v),0.),2.);let c=i.col.rgb;var e:vec3f;var al:f32;
+ if(i.uv.z<.5){
+  let cn=pow(.5+.5*cos(atan2(i.rp.z,i.rp.x)*8.),8.);let rim=1.-smoothstep(0.,.15,i.rp.y);
+  al=.1+.5*fr+.25*rim;e=c*(.25+1.4*fr+.9*rim+.5*cn*smoothstep(.1,.35,i.rp.y))+vec3f(pow(fr,4.)*.3);
+ }else{al=.35*(1.-i.uv.y*.6);e=c*(.9-.5*i.uv.y);}
+ e*=.8+.2*sin(g.cam.w*2.+i.col.w*5.);
+ let tr=exp(-SIG*distance(i.wp,g.cam.xyz)*g.sunA.w);
+ return vec4f(e*al*tr,al*dot(tr,vec3f(.333)));
+}
 // fish, manta
 @fragment fn fs_a(i:VO)->@location(0)vec4f{
  let v=normalize(g.cam.xyz-i.wp);
@@ -316,6 +354,19 @@ fn tpn(p:vec3f,n:vec3f,w:vec3f,s:f32)->NH{
   a=mix(a,vec3f(1.,.82,.25),(1.-smoothstep(0.,.014,abs(i.rp.y-.008)))*.8*step(-.28,i.rp.z));
   a*=1.-.7*(1.-smoothstep(.012,.02,length(i.rp.yz-vec2f(.02,.4))));
   m.a=a;m.s=vec2f(.4,12.);m.em=a*.03;
+ }else if(mt==11u){ // turtle shell (uv.z: 1 carapace, 0 plastron)
+  let q=i.rp.xz*vec2f(6.,5.);let f=abs(fract(q+vec2f(.5*floor(q.y),0.))-.5);let e=smoothstep(.34,.46,max(f.x,f.y*1.1));
+  m.a=mix(vec3f(.55,.5,.34)*(.8+.3*cl.r),mix(vec3f(.24,.19,.08),vec3f(.07,.05,.025),e)*(.75+.5*cl.r),i.uv.z);m.s=vec2f(.5,30.);
+ }else if(mt==12u){ // turtle skin
+  let k=textureSample(tb,ls,i.rp.xz*3.1+i.rp.y*2.);
+  m.a=mix(vec3f(.16,.19,.14),vec3f(.5,.48,.36),smoothstep(.5,.7,k.r))*(.8+.3*cl.r);m.s=vec2f(.2,14.);
+ }else if(mt==13u){ // whale shark: dark back with white spots and bars, pale belly
+  let top=smoothstep(-.03,.03,i.rp.y);let sp=1.-smoothstep(.12,.22,length(fract(i.rp.zx*vec2f(26.,30.))-.5));
+  let bar=1.-smoothstep(.03,.08,abs(fract(i.rp.z*9.)-.5));
+  m.a=mix(vec3f(.78,.8,.8),mix(vec3f(.1,.16,.24)*(.8+.4*cl.r),vec3f(.85,.88,.9),max(sp,bar*.6)),top);m.s=vec2f(.25,16.);
+ }else if(mt==14u){ // eel / octopus / crab: tinted mottled skin
+  let k=textureSample(tb,ls,i.rp.xz*2.3+i.rp.y*1.7);
+  m.a=i.col.rgb*mix(1.,.4,smoothstep(.45,.7,k.r+k.g*.4-.2))*(.75+.4*k.b);m.s=vec2f(.35,20.);
  }else{
   let top=i.uv.z;let ax=abs(i.rp.x);
   var bel=vec3f(.8,.84,.88);

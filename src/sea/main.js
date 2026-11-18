@@ -38,12 +38,13 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   const DSW = { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'greater' }, DSR = { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'greater-equal' };
   const PP = {}, pend = [];
   const rp = (key, d) => pend.push(dev.createRenderPipelineAsync(d).then(p => PP[key] = p));
-  for (const [k, fs, cull] of [[0, 'fs_r', 'back'], [0, 'fs_r', 'none'], [1, 'fs_f', 'none'], [2, 'fs_a', 'none'], [3, 'fs_a', 'none']])
+  for (const [k, fs, cull] of [[0, 'fs_r', 'back'], [0, 'fs_r', 'none'], [1, 'fs_f', 'none'], [2, 'fs_a', 'none'], [3, 'fs_a', 'none'], [4, 'fs_a', 'none'], [6, 'fs_a', 'none'], [7, 'fs_a', 'none']])
     rp('o' + k + cull, { layout: PL_M, vertex: { module: M_OBJ, entryPoint: 'vs', constants: { KIND: k }, buffers: VBL }, fragment: { module: M_OBJ, entryPoint: fs, targets: [{ format: HF }] }, primitive: { cullMode: cull }, depthStencil: DSW, multisample: { count: 4 } });
-  for (const k of [0, 1, 3]) rp('s' + k, { layout: PL_U, vertex: { module: M_OBJ, entryPoint: 'vs_s', constants: { KIND: k }, buffers: VBL }, primitive: { cullMode: 'none' }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 2.5 } });
+  for (const k of [0, 1, 3, 4, 6]) rp('s' + k, { layout: PL_U, vertex: { module: M_OBJ, entryPoint: 'vs_s', constants: { KIND: k }, buffers: VBL }, primitive: { cullMode: 'none' }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 2.5 } });
   rp('surf', { layout: PL_M, vertex: { module: M_ENV, entryPoint: 'vw' }, fragment: { module: M_ENV, entryPoint: 'fw', targets: [{ format: HF }] }, primitive: { topology: 'triangle-strip' }, depthStencil: DSW, multisample: { count: 4 } });
   rp('bg', { layout: PL_M, vertex: { module: M_ENV, entryPoint: 'vb' }, fragment: { module: M_ENV, entryPoint: 'fbg', targets: [{ format: HF }] }, depthStencil: DSR, multisample: { count: 4 } });
   const PBL = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } }, ADD = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } };
+  rp('j5', { layout: PL_M, vertex: { module: M_OBJ, entryPoint: 'vs', constants: { KIND: 5 }, buffers: VBL }, fragment: { module: M_OBJ, entryPoint: 'fs_j', targets: [{ format: HF, blend: PBL }] }, primitive: { cullMode: 'none' }, depthStencil: DSR, multisample: { count: 4 } });
   for (const k of [0, 1, 2]) rp('p' + k, { layout: PL_M, vertex: { module: M_PT, entryPoint: 'vp', constants: { PK: k }, buffers: [{ arrayStride: 32, stepMode: 'instance', attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x4' }, { shaderLocation: 1, offset: 16, format: 'float32x4' }] }] }, fragment: { module: M_PT, entryPoint: 'fp', constants: { PK: k }, targets: [{ format: HF, blend: PBL }] }, primitive: { topology: 'triangle-strip' }, depthStencil: DSR, multisample: { count: 4 } });
   for (const k of [0, 1, 2]) rp('g' + k, { layout: PL_U, vertex: { module: M_GEN, entryPoint: 'vf' }, fragment: { module: M_GEN, entryPoint: 'fg', constants: { GK: k }, targets: [{ format: k < 2 ? 'rgba8unorm' : 'r16float' }] } });
   const post = (key, m, fs, fmt, layout, c, blend) => rp(key, { layout, vertex: { module: m, entryPoint: 'vf' }, fragment: { module: m, entryPoint: fs, constants: c, targets: [{ format: fmt, blend }] } });
@@ -127,7 +128,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   const nearCam = (x, z, r) => { for (let i = 0; i < AV.length; i += 3)if (Math.hypot(x - AV[i], z - AV[i + 2]) < r) return 1; return 0; };
 
   // ---- world
-  const R = rng(20261117);
+  const R = rng(20261117), R0 = R;
   const TM = gridMesh(TG, 0, [1.5, 4, 9], (x, y, z) => { const t = ss(-36, -26, y), n = fbm(x * .018, 7.3, z * .018, 3); return ss(.53 - .13 * t, .65 - .1 * t, n); });
   const TV = TM.v, NV = TV.length / 10;
   const gy = (x, z) => { let y = -8; while (y > -62 && gs(TG, x, y, z) < 0) y -= .4; return y; };
@@ -136,7 +137,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   const zone = (x, z) => Math.hypot(x - 84, z + 58) < 25 || Math.hypot(x + 78, z - 52) < 14;
   const NC = 16, CW = 32, cellOf = (x, z) => cl((x + 256) / CW | 0, 0, NC - 1) + NC * cl((z + 256) / CW | 0, 0, NC - 1);
   const LAY = [], ID = [0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0];
-  function layer(mesh, inst, pm, ps, md, sd) {
+  function layer(mesh, inst, pm, ps, md, sd, lt) { // lt: translucent, drawn after the background
     const v = mesh.v instanceof Float32Array ? mesh.v : new Float32Array(mesh.v), ix = mesh.i instanceof Uint32Array ? mesh.i : new Uint32Array(mesh.i);
     let ia = new Float32Array(inst), cs = null; const n = ia.length / 16;
     if (!n) return;
@@ -147,7 +148,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
       o.sort((a, b) => c[a] - c[b]);
       for (let i = 0; i < n; i++)s.set(ia.subarray(o[i] * 16, o[i] * 16 + 16), i * 16); ia = s;
     }
-    LAY.push({ pm: PP[pm], ps: ps ? PP[ps] : null, vb: buf(v, BU.VERTEX), ib: buf(ix, BU.INDEX), ni: ix.length, inst: buf(ia, BU.VERTEX), n, cs, md: md || 0, sd: sd || 0, tris: ix.length / 3 | 0 });
+    LAY.push({ pm: PP[pm], ps: ps ? PP[ps] : null, vb: buf(v, BU.VERTEX), ib: buf(ix, BU.INDEX), ni: ix.length, inst: buf(ia, BU.VERTEX), n, cs, md: md || 0, sd: sd || 0, lt: lt || 0, tris: ix.length / 3 | 0 });
   }
   layer(TM, ID, 'o0back', 's0');
   // set pieces
@@ -155,6 +156,8 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   layer(sculptMesh(), [...SCP, 1, ...qax(0, 1, 0, 2.16), 1, 1, 1, 0, 0, 0, 0, 0], 'o0back', 's0');
   const SM = shipMesh(), SHG = [], SAX = qrot(SHQ, [0, 0, 1]);
   { let k = 0; for (const vi of new Set(SM.i)) { if (SM.v[vi * 10 + 8] || (k++ % 5) || R() > .55) continue; const n = qrot(SHQ, [SM.v[vi * 10 + 3], SM.v[vi * 10 + 4], SM.v[vi * 10 + 5]]); if (n[1] > .55) SHG.push([...add(SHP, qrot(SHQ, SM.p(vi))), n]); } }
+  const DK = SHG.filter(p => p[1] > Math.max(...SHG.map(q => q[1])) - 1.2), DKO = DK[DK.length >> 2], DKT = DK.reduce((a, p) => Math.hypot(p[0] - DKO[0], p[2] - DKO[2]) > Math.hypot(a[0] - DKO[0], a[2] - DKO[2]) ? p : a); // top deck spots kept clear: octopus + resting turtle
+  const free = p => Math.hypot(p[0] - DKO[0], p[2] - DKO[2]) > 2.2 && Math.hypot(p[0] - DKT[0], p[2] - DKT[2]) > 2;
   const onShip = (x, z) => { const t = cl((x - SHP[0]) * SAX[0] + (z - SHP[2]) * SAX[2], -19, 19); return Math.hypot(x - SHP[0] - SAX[0] * t, z - SHP[2] - SAX[2] * t) < 5; };
   layer(SM, [...SHP, 1, ...SHQ, 1, 1, 1, 0, 0, 0, 0, 0], 'o0none', 's0');
   layer(sailMesh(rng(71)), [...SHP, 1, ...SHQ, 1, 1, 1, 1.3, 0, .22, 900, 0], 'o1none', 's1');
@@ -198,7 +201,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
         tf(x, TV[o + 1] - ((x - TV[o]) * TV[o + 3] + (z - TV[o + 2]) * TV[o + 5]) / TV[o + 4] - .04, z, .9 + 1.1 * R());
       }
     }
-    for (const p of SHG) for (let k = 0; k < 3; k++)tf(p[0] + (R() - .5) * .6, p[1] - .03, p[2] + (R() - .5) * .6, .7 + .8 * R());
+    for (const p of SHG) for (let k = 0; k < 3; k++) { const n0 = T.length; tf(p[0] + (R() - .5) * .6, p[1] - .03, p[2] + (R() - .5) * .6, .7 + .8 * R()); if (!free(p)) T.length = n0; }
     layer(tuft(rng(41)), T, 'o1none', null, 60);
   }
   { // iridescent foliage, corals, sponges
@@ -223,10 +226,12 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
       if (R() < .05) for (let i = 0; i < 60; i++)BUB.push(x, y + 1, z, .025 + .05 * R(), R() * 2 - 1, R() * 2 - 1, R(), R());
     }
     for (const p of SHG) {
+      const nL = [FO[0].length, FO[1].length, CO[0].length, CO[1].length, CO[2].length, SP.length]; // deck spots stay clear (same random draws either way)
       const u = R(), q = qmul(qup(nz([p[3][0] * .6, p[3][1] * .6 + .4, p[3][2] * .6])), qax(0, 1, 0, R() * 6.28)), c = PAL[R() * PAL.length | 0], f = FC[R() * FC.length | 0];
       if (u < .4) { const t = R() < .5 ? 0 : R() < .5 ? 1 : 2; CO[t].push(p[0], p[1] - .03, p[2], .35 + .5 * R(), ...q, c[0], c[1], c[2], 0, 0, 0, t ? 150 : 95, 0); }
       else if (u < .62) FO[R() < .6 ? 0 : 1].push(p[0], p[1] - .04, p[2], .35 + .4 * R(), ...q, f[0], f[1], f[2], R() * 6.28, .035, .07, 150, 0);
       else if (u < .72) SP.push(p[0], p[1] - .05, p[2], .5 + .5 * R(), ...q, .8, .3, .2, 0, 0, 0, 0, 0);
+      if (!free(p)) [FO[0], FO[1], CO[0], CO[1], CO[2], SP].forEach((a, k) => a.length = nL[k]);
     }
     layer(rosette(rng(51)), FO[0], 'o1none', 's1', 150, 70); layer(fan(rng(52)), FO[1], 'o1none', 's1', 150, 70);
     layer(staghorn(rng(61)), CO[0], 'o0none', 's0', 95, 60); layer(tableCoral(rng(62)), CO[1], 'o0none', 's0', 160, 60); layer(brain(rng(63)), CO[2], 'o0none', 's0', 160, 60);
@@ -234,7 +239,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   }
   { // life: fish schools + mantas, on paths checked against the rock
     const ok = (c, Rx, Ay, Rz, ph, m) => { for (let i = 0; i < 64; i++) { const s = i / 64 * 6.283; if (gs(TG, c[0] + Rx * Math.cos(s), c[1] + Ay * Math.sin(2 * s + ph), c[2] + Rz * Math.sin(s)) > -m) return 0; } return 1; };
-    const fit = (ax, az, sp, y0, y1, Rx, Ay, Rz, m) => { for (let t = 0; t < 400; t++) { const c = [ax + (R() - .5) * sp, y0 + (y1 - y0) * R(), az + (R() - .5) * sp], ph = R() * 6.28; if (ok(c, Rx, Ay, Rz, ph, m)) return [...c, ph]; } return [ax, -8, az, 0]; };
+    const fit = (ax, az, sp, y0, y1, Rx, Ay, Rz, m, R = R0) => { for (let t = 0; t < 400; t++) { const c = [ax + (R() - .5) * sp, y0 + (y1 - y0) * R(), az + (R() - .5) * sp], ph = R() * 6.28; if (ok(c, Rx, Ay, Rz, ph, m)) return [...c, ph]; } return [ax, -8, az, 0]; };
     const FI = [], gau = () => (R() + R() + R() - 1.5) * .9, FCO = [[.12, .42, .95], [1, .5, .1], [.15, .8, .7], [.95, .22, .42], [.95, .85, .25], [.6, .3, 1]];
     [[10, -8, 30, 5.5, 1.2, 5.5, 650, 9, .42], [30, 20, 60, 22, 3, 15, 520, .5, .2], [-40, -30, 60, 18, 2.5, 24, 480, .5, -.19], [84, -58, 40, 20, 3, 13, 520, .55, .17], [-78, 52, 30, 17, 4, 17, 520, .6, -.2], [-10, 80, 80, 26, 3, 18, 420, .45, .15], [120, 40, 90, 24, 3, 20, 420, .5, -.16], [-120, -40, 90, 22, 3, 22, 420, .5, .17]].forEach((s, si) => {
       const c = fit(s[0], s[1], s[2], -36, -14, s[3] + 3, s[4] + 2, s[5] + 3, 4), col = FCO[si % FCO.length];
@@ -247,6 +252,47 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
       MA.push(c[0], c[1], c[2], 3.6 + 1.1 * R(), s[3], 3, s[3], c[3], 0, 0, 0, s[7] === undefined ? R() * 6.28 : s[7], .24 * Math.sign(s[4]), 0, s[4], R() * 6.28);
     });
     layer(mantaMesh(), MA, 'o3none', 's3');
+    { const R = rng(424242); // new creatures draw from their own stream so the original reef layout is unchanged
+    // sea turtles: a few gliding on loops (path kind, flipper strokes) and one resting on the wreck
+    const TT = [];
+    [[-30, 10, 60, 18, 2.5, 14], [60, -30, 60, 22, 3, 16], [-60, 60, 70, 20, 2, 26], [40, 70, 80, 14, 2, 12], [0, -60, 60, 12, 2, 12], [10, 20, 40, 14, 2, 18]].forEach(s => {
+      const c = fit(s[0], s[1], s[2], -32, -12, s[3], s[4], s[5], 4, R), sp = (R() < .5 ? -1 : 1) * 1.3 / Math.max(s[3], s[5]);
+      TT.push(c[0], c[1], c[2], 1.1 + .4 * R(), s[3], s[4], s[5], c[3], 0, 0, 0, R() * 6.28, .12 * Math.sign(sp), 1, sp, R() * 6.28);
+    });
+    { const p = DKT; TT.push(p[0], p[1] + .28, p[2], 1.25, .01, 0, .01, 0, 0, 0, 0, 1.3, 0, .15, 1e-4, 0); }
+    layer(turtleMesh(), TT, 'o4none', 's4');
+    // whale shark: one giant cruising just under the surface (the mesas reach up to ~-6 m; this is the clear loop), ~3 min per lap
+    const WS = [60, -4, 0, 14, 70, .5, 70, 0, 0, 0, 0, 2.2, 0, 0, .033, 0];
+    layer(whaleSharkMesh(), WS, 'o6none', 's6');
+    // jellyfish drifting in the upper water (translucent, drawn late)
+    const JE = [], JC = [[.3, .9, 1], [1, .35, .85], [.6, .45, 1], [1, .7, .3], [.35, 1, .6]];
+    for (let k = 0, n = 0; k < 5000 && n < 50; k++) {
+      const w = n < 32 ? 150 : 320, x = (R() - .5) * w, y = -17 + 11 * R(), z = (R() - .5) * w; if (gs(TG, x, y, z) > -6 || gs(TG, x, y - 3, z) > -3) continue;
+      const c = JC[n % JC.length], b = R() * 6.28; JE.push(x, y, z, .55 + .45 * R(), ...qax(Math.cos(b), 0, Math.sin(b), .25 * R()), c[0], c[1], c[2], R() * 6.28, 2 + 3 * R(), .9 + .5 * R(), 0, R() * 6.28); n++;
+    }
+    layer(jellyMesh(rng(81)), JE, 'j5', null, 0, 0, 1);
+    // eels peeking out of crevices (slide in and out), an octopus on the wreck deck
+    const EE = [];
+    for (let k = 0, n = 0; k < 300000 && n < 40; k++) {
+      const o = (R() * NV | 0) * 10, x = TV[o], y = TV[o + 1], z = TV[o + 2], nx = TV[o + 3], ny = TV[o + 4], nz_ = TV[o + 5];
+      if (ny < -.15 || ny > .5 || y > -12 || y < -50 || Math.hypot(x, z) > 140 || zone(x, z) || gs(TG, x + nx * 1.6, y + ny * 1.6, z + nz_ * 1.6) > -1.5) continue;
+      const c = [[.45, .5, .16], [.3, .36, .2], [.55, .42, .2]][n % 3];
+      EE.push(x - nx * .1, y - ny * .1, z - nz_ * .1, 1.5 + .6 * R(), ...qmul(qup(nz([nx, ny + .25, nz_])), qax(0, 1, 0, R() * 6.28)), c[0], c[1], c[2], R() * 6.28, .16, 1.6 + .6 * R(), 5, .45 + .2 * R()); n++;
+    }
+    layer(eelMesh(), EE, 'o7none', null, 80);
+    { const p = DKO; layer(octopusMesh(), [p[0], p[1] - .02, p[2], .9, ...qmul(qup(p[3]), qax(0, 1, 0, 1)), .8, .28, .14, 0, .1, 1.1, 3, 0], 'o7none', null); }
+    // reef life: starfish and crabs on the sand, anemones with little fish darting through them
+    const SF = [], AN = [], CF = [], CB = [], SC = [[1, .45, .15], [.85, .15, .2], [.55, .25, .75], [.25, .45, .9], [1, .7, .3]], AC = [[.65, .3, 1], [1, .38, .7], [.35, .95, .6], [1, .55, .25]];
+    const spot = (ny, maxR) => { for (let k = 0; k < 4000; k++) { const o = (R() * NV | 0) * 10, x = TV[o], y = TV[o + 1], z = TV[o + 2]; if (TV[o + 4] < ny || TV[o + 7] > .42 || y > -12 || zone(x, z) || Math.hypot(x, z) > maxR || onShip(x, z)) continue; return [x, y, z, qmul(qup([TV[o + 3], TV[o + 4], TV[o + 5]]), qax(0, 1, 0, R() * 6.28))]; } return null; };
+    for (let n = 0; n < 260; n++) { const p = spot(.82, 130); if (!p) break; const c = SC[R() * SC.length | 0]; SF.push(p[0], p[1] + .01, p[2], .2 + .2 * R(), ...p[3], c[0], c[1], c[2], 0, 0, 0, 60, 0); }
+    for (let n = 0; n < 140; n++) {
+      const p = spot(.6, 120); if (!p) break; const c = AC[R() * AC.length | 0], s = .8 + .7 * R();
+      AN.push(p[0], p[1] - .03, p[2], s, ...p[3], c[0], c[1], c[2], R() * 6.28, .5, 0, 60, 0);
+      if (n % 3 == 0) for (let f = 0, nf = 2 + (R() * 3 | 0); f < nf; f++) { const r = .45 + .3 * R(); CF.push(p[0], p[1] + .5 * s, p[2], .11 + .05 * R(), r, .12, r, R() * 6.28, 1, .42 + .2 * R(), .06, R() * 6.28, 0, 0, (R() < .5 ? -1 : 1) * (1.2 + .8 * R()), R() * 6.28); }
+    }
+    for (let n = 0; n < 70; n++) { const p = spot(.85, 110); if (!p) break; const c = [[.85, .35, .18], [.75, .5, .3], [.9, .25, .2]][n % 3]; CB.push(p[0], p[1] + .02, p[2], .26 + .14 * R(), ...p[3], c[0], c[1], c[2], R() * 6.28, .12, 7 + 3 * R(), 2, -(.25 + .3 * R())); }
+    layer(starfishMesh(), SF, 'o0none', null, 60); layer(anemoneMesh(rng(91)), AN, 'o1none', null, 60); layer(crabMesh(), CB, 'o7none', null, 50); layer(fishMesh(), CF, 'o2none', null);
+    }
   }
   // sprites
   for (const [l, s, c] of [[[0, 1.2, -17.3], -2.2, [1, .5, .16]], [[1.2, -1.6, -5], -1.7, [.9, .42, .14]], [[-.6, -1.2, 8], -1.3, [.8, .4, .14]]]) { const p = add(SHP, qrot(SHQ, l)); SPK.push(p[0], p[1], p[2], s, c[0] * 1.5, c[1] * 1.5, c[2] * 1.5, R()); }
@@ -267,9 +313,9 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
     }
   }
   let drawn = 0;
-  function drawLayers(p, sh) {
+  function drawLayers(p, sh, lt) {
     for (let l = 0; l < LAY.length; l++) {
-      const L = LAY[l], pp = sh ? L.ps : L.pm; if (!pp) continue;
+      const L = LAY[l], pp = sh ? L.ps : L.pm; if (!pp || L.lt !== lt) continue;
       p.setPipeline(pp); p.setVertexBuffer(0, L.vb); p.setVertexBuffer(1, L.inst); p.setIndexBuffer(L.ib, 'uint32');
       const cs = L.cs; if (!cs) { p.drawIndexed(L.ni, L.n); drawn = drawn + L.tris * L.n | 0; continue; }
       const md = sh ? L.sd : L.md; let run = -1, cnt = 0;
@@ -319,13 +365,14 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
     const e = dev.createCommandEncoder();
     let p = e.beginRenderPass(PD_CA[0]); p.setPipeline(PP.g2); p.setBindGroup(0, BG_U); p.draw(3); p.end();
     for (let m = 1; m < 5; m++) { p = e.beginRenderPass(PD_CA[m]); p.setPipeline(PP.b16); p.setBindGroup(0, BG_U); p.setBindGroup(1, BG_CA[m]); p.draw(3); p.end(); }
-    p = e.beginRenderPass(PD_SH); p.setBindGroup(0, BG_US); drawLayers(p, 1); p.end();
+    p = e.beginRenderPass(PD_SH); p.setBindGroup(0, BG_US); drawLayers(p, 1, 0); p.end();
     p = e.beginRenderPass(PD_VM); p.setPipeline(PP.vm); p.setBindGroup(0, BG_VM); p.draw(3); p.end();
     p = e.beginRenderPass(PD_VH); p.setPipeline(PP.vb0); p.setBindGroup(0, BG_VH); p.draw(3); p.end();
     p = e.beginRenderPass(PD_VV); p.setPipeline(PP.vb1); p.setBindGroup(0, BG_VV); p.draw(3); p.end();
-    p = e.beginRenderPass(PD_MAIN); p.setBindGroup(0, BG_M); drawLayers(p, 0);
+    p = e.beginRenderPass(PD_MAIN); p.setBindGroup(0, BG_M); drawLayers(p, 0, 0);
     if (!DBG) { p.setPipeline(PP.surf); p.draw(4); }
     p.setPipeline(PP.bg); p.draw(3);
+    drawLayers(p, 0, 1);
     for (let i = 0; i < PTS.length; i++) { const s = PTS[i]; p.setPipeline(s.p); p.setVertexBuffer(0, s.b); p.draw(4, s.n); }
     HO.portal(p, WI);
     p.end();

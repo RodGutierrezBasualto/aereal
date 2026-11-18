@@ -277,16 +277,23 @@ struct KO{@builtin(position)pos:vec4f,@location(0)wp:vec3f,@location(1)n:vec3f,@
 fn cpath(c:vec4f,a:f32,ph:f32,va:f32)->vec3f{return c.xyz+vec3f(cos(a)*c.w*(1.+.25*sin(a*2.+ph)),sin(a*1.3+ph)*va,sin(a)*c.w*(1.+.25*cos(a*3.+ph)));}
 @vertex fn vs(@location(0)a0:vec4f,@location(1)a1:vec4f,@location(2)i0:vec4f,@location(3)i1:vec4f,@location(4)i2:vec4f)->KO{
  let t=U.cam.w;let sz=i1.w;let a=t*i1.y/i0.w+i1.x;let fp=i0.x*.013+i0.z*.007;
- let p0=cpath(i0,a,fp,i2.w);let f=normalize(cpath(i0,a+.02,fp,i2.w)-p0);
+ var p0=cpath(i0,a,fp,i2.w);let f=normalize(cpath(i0,a+.02,fp,i2.w)-p0);
+ if(i1.z>1.5){p0+=vec3f(sin(t*1.9+i2.z*5.),sin(t*3.3+i2.z*3.)*.7,cos(t*1.6+i2.z*7.))*sz*1.5;}
+ var st=0.;if(i1.z<.5||i1.z>1.5){let dc=p0-U.cam.xyz;let dl=length(dc);st=1.-smoothstep(sz*3.,sz*14.,dl);p0+=normalize(dc+vec3f(0.,dl*.4,0.))*st*sz*9.;}
  var r=normalize(cross(f,vec3f(0.,1.,0.)));var u=cross(r,f);r=normalize(r-u*.32);u=cross(r,f);
  var q=a0.xyz;var n=a1.yzw;let wt=a0.w;
- if(i1.z<.5){let gate=smoothstep(-.3,.5,sin(t*.21+i2.z*3.));let an=sin(t*(2.5+fract(i2.z)*.8)+i2.z-wt*1.1)*(.12+.5*gate);q.y+=sin(an)*wt*.9;q.x*=mix(1.,cos(an),wt*.8);n.x-=sign(q.x)*sin(an)*wt*.8;}
+ if(i1.z<.5){let gate=max(smoothstep(-.3,.5,sin(t*.21+i2.z*3.)),st);let an=sin(t*(2.5+fract(i2.z)*.8)+i2.z-wt*1.1)*(.12+.5*gate);q.y+=sin(an)*wt*.9;q.x*=mix(1.,cos(an),wt*.8);n.x-=sign(q.x)*sin(an)*wt*.8;}
+ else if(i1.z>1.5){let an=sin(t*15.+i2.z*9.)*1.05+.35;let s=sign(q.x);let ax=abs(q.x);q=vec3f(s*ax*cos(an),q.y+ax*sin(an),q.z);n=vec3f(-s*sin(an)*n.y+n.x,cos(an)*n.y,n.z);}
  else{let an=t*1.7+i2.z-wt*2.4+q.z*1.5;q.y+=sin(an)*.3*pow(wt,1.4);n.x+=sign(q.x)*cos(an)*.7*wt;let tl=max(-q.z-.45,0.);q.x+=sin(t*1.9+i2.z+q.z*2.5)*.12*tl;q.y+=cos(t*1.5+i2.z+q.z*2.)*.08*tl;}
  var o:KO;o.wp=p0+r*(q.x*sz+i2.x)+u*(q.y*sz+i2.y)+f*(q.z*sz);o.pos=U.vp*vec4f(o.wp,1.);o.n=r*n.x+u*n.y+f*n.z;o.c=vec2f(a1.x,i1.z);return o;}
 @fragment fn fs(i:KO,@builtin(front_facing)ff:bool)->@location(0)vec4f{
  let V=normalize(U.cam.xyz-i.wp);var n=normalize(i.n);let top=dot(n,V)>0.;if(!top){n=-n;}
  let L=U.sun.xyz;var alb:vec3f;var em=vec3f(0.);
  if(i.c.y<.5){alb=mix(vec3f(.56,.5,.42),vec3f(.62,.36,.09),smoothstep(.35,.85,i.c.x));alb=mix(alb,vec3f(.13,.085,.06),smoothstep(.95,1.08,i.c.x));if(!top){alb=mix(alb,vec3f(.85,.8,.72),.6);}}
+ else if(i.c.y>1.5){let h=fract(i.c.y);let r=i.c.x;
+  let b=select(select(select(vec3f(1.,.86,.92),vec3f(1.,.8,.1),h<.75),vec3f(.06,.42,1.),h<.5),vec3f(1.,.4,.03),h<.25);
+  alb=mix(vec3f(.025,.02,.02),b,smoothstep(.06,.16,r));alb=mix(alb,vec3f(.03,.02,.02),smoothstep(.84,.93,r));if(!top){alb*=.7;}
+  em=b*select(.08,.3,h>=.25&&h<.5)*smoothstep(.06,.16,r)*(1.-smoothstep(.84,.93,r));}
  else{alb=select(mix(vec3f(.16,.25,.3),vec3f(.03,.09,.14),smoothstep(.2,.9,i.c.x)),mix(vec3f(.012,.06,.12),vec3f(.03,.22,.32),i.c.x),top);em=vec3f(.06,1.,.8)*((smoothstep(.72,1.,i.c.x)*1.6+select(.9*smoothstep(.35,.3,i.c.x),0.,top))*(.6+.4*sin(U.cam.w*2.+i.wp.x*.05)));}
  let rim=pow(1.-saturate(dot(n,V)),3.);
  return fin(alb*(SUNC*cloudSh(i.wp)*(saturate(dot(n,L)*.75+.25)+rim*.4*saturate(dot(-V,L)+.3))+amb(n))+em,i.wp,i.pos.xy);}
@@ -300,10 +307,15 @@ struct QO{@builtin(position)pos:vec4f,@location(0)uv:vec2f,@location(1)@interpol
   let dr=vec3f(t*1.6,sin(t*.13+i1.x*40.)*3.-t*.25,t*.9)+vec3f(sin(t*.31+i1.z*20.),cos(t*.27+i1.w*20.),sin(t*.23+i1.x*9.))*2.5;
   p=o+(fract((i0.xyz+dr-o)/180.+.5)-.5)*180.;let d=length(p-o);
   a=smoothstep(75.,45.,d)*smoothstep(20.,34.,d)*max(0.,.35+.65*sin(t*(1.+i1.z*2.)+i1.w*30.));
- }else{
+ }else if(i1.y<1.5){
   let u=fract(t*.018*i1.z+i1.x);let an=i1.x*80.+u*18.+t*.25*i1.z;let rr=i1.w*(.35+u*.8);
   p=vec3f(i0.x+cos(an)*rr,i0.y+u*1500.,i0.z+sin(an)*rr);
   a=smoothstep(0.,.1,u)*smoothstep(1.,.7,u)*smoothstep(1700.,700.,length(p-o))*smoothstep(15.,50.,length(p-o))*(.6+.4*sin(t*3.*i1.z+i1.x*90.));col=mix(vec3f(1.,.5,.12),vec3f(1.,.72,.3),fract(i1.x*13.))*.55;
+ }else{
+  let ph=i1.w*6.2832;let an=t*(.3+.35*i1.z)*select(-1.,1.,fract(i1.w*7.)>.5)+ph;let rr=i1.x;
+  p=i0.xyz+vec3f(cos(an)*rr,sin(an*1.7+ph*3.)*rr*.35,sin(an)*rr)+vec3f(sin(t*3.1+ph*13.),cos(t*2.7+ph*7.),sin(t*3.7+ph*5.))*2.;
+  let d=length(p-o);a=smoothstep(420.,160.,d)*smoothstep(3.,10.,d)*(.4+.6*abs(sin(t*(9.+4.*i1.z)+ph*20.)));
+  col=mix(vec3f(1.,.7,.3),vec3f(1.,.88,.58),fract(i1.w*31.))*2.6;
  }
  let v=p-o;let d=length(v);let sz=max(i0.w,d*U.misc.z*1.4);a*=(i0.w/sz)*(i0.w/sz)*exp(-fogTau(o,v/d,d));
  var q:QO;q.pos=U.vp*vec4f(p+normalize(U.cr.xyz)*(cn.x*sz)+normalize(U.cu.xyz)*(cn.y*sz),1.);q.uv=cn;q.c=vec4f(col*a,0.);return q;}

@@ -273,6 +273,16 @@ function birdMesh() { // forward +z, half-span 1; a0 = pos + wing weight, a1 = c
   for (const s of [-1, 0, 1]) { const n = [0, 1, 0]; P(-.06 + s * .05, .02, -.4, 0, .2, n); P(.06 + s * .05, .02, -.4, 0, .2, n); P(s * .2, .02, -.9, 0, .95, n) }
   return new Float32Array(v);
 }
+function butterflyMesh() { // forward +z, half-span 1; a0 = pos + |x|, a1 = (0 body .. 1 wing edge) + normal
+  const v = [], up = [0, 1, 0], P = (x, y, z, c, n) => v.push(x, y, z, abs(x), c, n[0], n[1], n[2]);
+  const fan = (s, r, O) => { for (let k = 0; k + 1 < O.length; k++) { P(s * r[0], 0, r[1], .12, up); P(s * O[k][0], 0, O[k][1], 1, up); P(s * O[k + 1][0], 0, O[k + 1][1], 1, up) } };
+  for (const s of [-1, 1]) {
+    fan(s, [.04, .12], [[.04, .3], [.2, .44], [.55, .64], [.92, .56], [1, .32], [.8, .12], [.45, .02], [.04, -.02]]);
+    fan(s, [.04, -.04], [[.04, -.02], [.4, -.02], [.7, -.18], [.72, -.45], [.5, -.7], [.25, -.62], [.06, -.3]]);
+  }
+  for (const [a, b] of [[[0, .04], [0, -.04]], [[.035, 0], [-.035, 0]]]) { const n = a[0] ? up : [1, 0, 0]; P(a[0], a[1], .4, 0, n); P(b[0], b[1], .4, 0, n); P(a[0], a[1], -.45, 0, n); P(b[0], b[1], .4, 0, n); P(b[0], b[1], -.45, 0, n); P(a[0], a[1], -.45, 0, n) }
+  return new Float32Array(v);
+}
 function rayMesh() {
   const v = [], P = (x, y, z, w, c) => v.push(x, y, z, w, c, x * .3, 1, 0), T = (a, b, c) => { P(...a); P(...b); P(...c) };
   const xs = [0, .12, .3, .55, .8, 1], le = [.44, .43, .34, .14, -.12, -.34], te = [-.42, -.38, -.31, -.27, -.3, -.38], dr = x => -.16 * x * x;
@@ -295,7 +305,8 @@ function genWorld() {
   const CL = new Bk(8), PL = new Bk(8), TU = new Bk(8), VI = new Bk(12), CR = [], PA = [];
   W.vine = (k, a, b, sag, sw, free, g) => VI.add(k, [a[0], a[1], a[2], sw, b[0], b[1], b[2], sag, rng(), g, free, rng()]);
   W.plant = (k, p, s, sw, kind, g) => kind ? TU.add(k, [p[0], p[1], p[2], s, rng() * TAU, rng(), g, kind + sw * .5]) : PL.add(k, [p[0], p[1], p[2], s, -1, rng(), g, sw]);
-  const cluster = (k, x, y, z, r, kind, sw, g) => { CL.add(k, [x, y, z, r, kind, rng(), g, sw]); W.sph.push(x, y, z, r) };
+  const GC = [], TB = []; // golden canopy clusters + trunk bases on the home island (moths, butterflies)
+  const cluster = (k, x, y, z, r, kind, sw, g) => { CL.add(k, [x, y, z, r, kind, rng(), g, sw]); W.sph.push(x, y, z, r); if (kind > .7 && /^g[0-6]$/.test(k)) GC.push(x, y, z, r) };
   const grp = (I, yaw, ax, ay, az, spin, rate) => { const o = W.ng * 12; W.grp.set([I[0], I[1], I[2], yaw, ax, ay, az, rng() * 9, spin, rate, 0, 0], o); return W.ng++ };
   const hole = (x, z) => sst(170, 110, sqrt(x * x + (z - 400) ** 2));
   const isl = (cx, cy, cz, R, Ht, D, drift) => { const ii = IS.length, I = { cx, cy, cz, R, Ht, D, g: 0, pad: 0, seed: ii * 7.31 + 1.7, ff: (x, z) => fbm(x * .0052 + 31, 5.5, z * .0052, 3) - (ii ? 0 : hole(x, z)) }; if (drift) { I.g = grp([cx, cy, cz], .03, 22 + rng() * 22, 8 + rng() * 10, 22 + rng() * 22, 0, 2.6); I.pad = 60 } IS.push(I); return I };
@@ -380,7 +391,7 @@ function genWorld() {
   const GT = [[home, 70, -110, 680], [home, -310, -220, 550], [home, 330, 160, 510], [home, -270, 250, 490], [home, 360, -310, 460], [home, -440, 30, 430], [home, 30, -430, 470], [east, 60 + 1090, 400 - 70, 400], [east, 1090 - 120, 400 + 110, 350], [far, 1820, 1020, 360]];
   GT.push([{ g: 0, pad: 0, fy: MT + 6 }, MX + 30, MZ + 40, 340]);
   for (let i = 3; i < IS.length; i++)GT.push([IS[i], IS[i].cx + (rng() - .5) * 60, IS[i].cz + (rng() - .5) * 60, 240 + rng() * 150]);
-  let gy0 = 0; GT.forEach((t, i) => { const y = giant(t[0], t[1], t[2], t[3], i, i == 0); if (!i) gy0 = y });
+  let gy0 = 0; GT.forEach((t, i) => { const y = giant(t[0], t[1], t[2], t[3], i, i == 0); if (!i) gy0 = y; if (i < 7) TB.push([t[1], y, t[2]]) });
   // airship skeleton in T0
   {
     const [ox, oy, oz, yaw, pit, rol, L, Rm] = SH, C = [GT[0][1] + ox, gy0 + oy, GT[0][2] + oz], A = [cos(pit) * sin(yaw), sin(pit), -cos(pit) * cos(yaw)]; let S = [cos(yaw), 0, sin(yaw)], U = crs(S, A);
@@ -452,13 +463,19 @@ function genWorld() {
   flock([-180, -190, 900], 140, 34, 1, 7, 14, 110); flock([690, 120, -760], 95, 30, 1, 6.5, 13, 220); flock([1480, 0, 330], 120, 30, 1, 7, 15, 240); flock([300, -260, 760], 420, 36, 1, 8, 18, 60);
   for (let i = 0; i < 5000; i++)PA.push(rng() * 180, rng() * 180, rng() * 180, .06 + rng() * .07, rng(), 0, rng(), rng());
   TH.forEach((t, k) => { for (let i = 0; i < 1500; i++)PA.push(t[0], -620, t[1], .7 + rng() * 1.1, rng(), 1, .5 + rng(), sqrt(rng()) * t[2] * .8) });
+  // butterflies (creature kind 2 + hue) over the home island meadows, around the trunks and on the rim facing the spawn
+  const gH = (x, z) => topY(home, x, z, isR(home, x, z)), bfly = (x, z, R, n) => { const y = gH(x, z) + 30 + rng() * 30; for (let i = 0; i < n; i++)CR.push(x, y, z, R * (.6 + .6 * rng()), rng() * TAU, 6 + 5 * rng(), 2 + min(rng(), .999), 2.2 + rng(), (rng() - .5) * R * .6, (rng() - .5) * 16, rng() * TAU, 10 + rng() * 14) };
+  const open = (x, z) => isR(home, x, z) < .82 && TB.every(b => (x - b[0]) ** 2 + (z - b[2]) ** 2 > 230 * 230); // meadow clear of the giant trunks and roots
+  for (let j = 0, k = 0; j < 22 && k < 4000; k++) { const near = j < 6, a = near ? 2.26 + (rng() - .5) * .9 : rng() * TAU, r = 640 * (near ? .5 + .3 * rng() : sqrt(rng()) * .82), x = cos(a) * r, z = sin(a) * r; if (!open(x, z)) continue; bfly(x, z, 30 + rng() * 20, 6 + (rng() * 4 | 0)); j++ }
+  // golden moth swarms circling the canopies (particle mode 2: centre, size | orbit radius, mode, speed, seed)
+  for (let s = 0; s < 90; s++) { const k = (rng() * GC.length / 4 | 0) * 4, r = GC[k + 3]; for (let i = 0; i < 32; i++)PA.push(GC[k], GC[k + 1], GC[k + 2], .45 + rng() * .35, r * (1.25 + .7 * rng()), 2, rng(), rng()) }
   W.th = TH;
   // pack
   W.cl = CL.build((b, k) => b[k + 3] * 1.4 + 50); W.pl = PL.build((b, k) => b[k + 3] + 50); W.tu = TU.build((b, k) => b[k + 3] + 50); W.vi = VI.build((b, k) => b[k + 10] > 1.5 ? 1500 : 200);
-  W.cr = new Float32Array(CR); W.nb = CR.filter((v, i) => i % 12 == 6 && !v).length; W.pa = new Float32Array(PA);
+  W.cr = new Float32Array(CR); W.nb = CR.filter((v, i) => i % 12 == 6 && !v).length; W.nr = CR.filter((v, i) => i % 12 == 6 && v == 1).length; W.pa = new Float32Array(PA);
   W.vb = M.pack(); W.ib = M.i.subarray(0, M.ni); W.items = new Float32Array(M.items);
   W.cap = new Float32Array(W.cap); W.sph = new Float32Array(W.sph);
-  W.cm = clusterMesh(NLEAF, rng); W.fern = fernMesh(rng); W.tuft = tuftMesh(rng); W.bird = birdMesh(); W.ray = rayMesh();
+  W.cm = clusterMesh(NLEAF, rng); W.fern = fernMesh(rng); W.tuft = tuftMesh(rng); W.bird = birdMesh(); W.ray = rayMesh(); W.bfly = butterflyMesh();
   // clearance to the nearest solid (dev tool for validating camera paths)
   W.gs = (x, y, z) => {
     let d = 1e9;

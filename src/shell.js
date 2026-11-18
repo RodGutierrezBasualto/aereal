@@ -83,7 +83,7 @@ fn itm(v:vec3f)->vec3f{
 
   // ---- worlds
   const C = [null, null], LD = [null, null];
-  const load = i => LD[i] || (LD[i] = WORLDS[i](H, i).then(c => { C[i] = c; if (!c || !c.bench) msg[i] = ''; if (c && i !== H.cur) snap(i); return c }));
+  const load = i => LD[i] || (LD[i] = WORLDS[i](H, i).then(c => { C[i] = c; if (!c || !c.bench) msg[i] = ''; if (!c && i === H.cur) show(); if (c && i !== H.cur) snap(i); return c }));
   const snap = i => { const p = PT[i]; C[i].place(p.exit[0], p.exit[1], p.exit[2], p.yaw, 0); C[i].snap() };
   const first = await load(H.cur);
   if (!first) { if (CAP && !BENCH) load(1 - H.cur); return } // capture mode: the page is driven through window.__cap

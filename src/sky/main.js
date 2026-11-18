@@ -11,9 +11,9 @@ const main = async (H, ID) => {
   const mkbuf = (d, u) => { const b = dev.createBuffer({ size: (d.byteLength + 3) & ~3, usage: u | BU.COPY_DST }); q.writeBuffer(b, 0, d.buffer || d, d.byteOffset || 0, d.byteLength); return b };
   const split = it => { const n = it.length / 8, f = new Float32Array(n * 4), i = new Int32Array(n * 4); for (let k = 0; k < n; k++) { f.set(it.subarray(k * 8, k * 8 + 4), k * 4); i[k * 4] = it[k * 8 + 4]; i[k * 4 + 1] = it[k * 8 + 5]; i[k * 4 + 2] = it[k * 8 + 6] } return [f, i, n] };
   // geometry
-  const B = { vb: mkbuf(W.vb, BU.VERTEX), ib: mkbuf(W.ib, BU.INDEX), cmv: mkbuf(W.cm.v, BU.VERTEX), cmi: mkbuf(W.cm.i, BU.INDEX), cli: mkbuf(W.cl.d, BU.VERTEX), fern: mkbuf(W.fern, BU.VERTEX), tuft: mkbuf(W.tuft, BU.VERTEX), pli: mkbuf(W.pl.d, BU.VERTEX), tui: mkbuf(W.tu.d, BU.VERTEX), vii: mkbuf(W.vi.d, BU.VERTEX), bird: mkbuf(W.bird, BU.VERTEX), ray: mkbuf(W.ray, BU.VERTEX), cri: mkbuf(W.cr, BU.VERTEX), pai: mkbuf(W.pa, BU.VERTEX) };
+  const B = { vb: mkbuf(W.vb, BU.VERTEX), ib: mkbuf(W.ib, BU.INDEX), cmv: mkbuf(W.cm.v, BU.VERTEX), cmi: mkbuf(W.cm.i, BU.INDEX), cli: mkbuf(W.cl.d, BU.VERTEX), fern: mkbuf(W.fern, BU.VERTEX), tuft: mkbuf(W.tuft, BU.VERTEX), pli: mkbuf(W.pl.d, BU.VERTEX), tui: mkbuf(W.tu.d, BU.VERTEX), vii: mkbuf(W.vi.d, BU.VERTEX), bird: mkbuf(W.bird, BU.VERTEX), ray: mkbuf(W.ray, BU.VERTEX), bfly: mkbuf(W.bfly, BU.VERTEX), cri: mkbuf(W.cr, BU.VERTEX), pai: mkbuf(W.pa, BU.VERTEX) };
   const [solF, solI, nSol] = split(W.items), [clF, clI, nCl] = split(W.cl.it), [plF, plI, nPl] = split(W.pl.it), [tuF, tuI, nTu] = split(W.tu.it), [viF, viI, nVi] = split(W.vi.it);
-  const CORE = W.cm.core, NFERN = W.fern.length / 32 * 6, NTUFT = W.tuft.length / 8, NBIRD = W.bird.length / 8, NRAY = W.ray.length / 8, NB = W.nb, NR = W.cr.length / 12 - NB, NPA = W.pa.length / 8;
+  const CORE = W.cm.core, NFERN = W.fern.length / 32 * 6, NTUFT = W.tuft.length / 8, NBIRD = W.bird.length / 8, NRAY = W.ray.length / 8, NB = W.nb, NR = W.nr, NF = W.cr.length / 12 - NB - NR, NBF = W.bfly.length / 8, NPA = W.pa.length / 8;
   // uniforms
   const UB = new Float32Array(100), ubuf = dev.createBuffer({ size: 400, usage: BU.UNIFORM | BU.COPY_DST }), gbuf = mkbuf(W.grp, BU.UNIFORM), stbuf = mkbuf(W.st, BU.UNIFORM);
   // textures & samplers
@@ -196,7 +196,7 @@ const main = async (H, ID) => {
     if (!(IM[4] & 16)) for (let k = 0; k < nPl; k++)if (inFr(plF, k * 4) && near(plF, k * 4, 1100)) p.drawIndexed(NFERN, plI[k * 4 + 1], 0, 0, plI[k * 4]);
     p.setPipeline(P.plant); p.setVertexBuffer(0, B.tuft); p.setVertexBuffer(1, B.tui);
     if (!(IM[4] & 16)) for (let k = 0; k < nTu; k++)if (inFr(tuF, k * 4) && near(tuF, k * 4, 1000)) p.draw(NTUFT, tuI[k * 4 + 1], 0, tuI[k * 4]);
-    p.setPipeline(P.crea); p.setVertexBuffer(1, B.cri); p.setVertexBuffer(0, B.bird); p.draw(NBIRD, NB, 0, 0); p.setVertexBuffer(0, B.ray); p.draw(NRAY, NR, 0, NB);
+    p.setPipeline(P.crea); p.setVertexBuffer(1, B.cri); p.setVertexBuffer(0, B.bird); p.draw(NBIRD, NB, 0, 0); p.setVertexBuffer(0, B.ray); p.draw(NRAY, NR, 0, NB); p.setVertexBuffer(0, B.bfly); p.draw(NBF, NF, 0, NB + NR);
     p.setPipeline(P.vine); p.setVertexBuffer(0, B.vii);
     for (let k = 0; k < nVi; k++)if (inFr(viF, k * 4) && near(viF, k * 4, 2800)) p.draw(50, viI[k * 4 + 1], 0, viI[k * 4]);
     p.setPipeline(P.part); p.setVertexBuffer(0, B.pai); p.draw(4, NPA);
