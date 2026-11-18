@@ -24,6 +24,8 @@
     { c: [-560, 218, 836], R: 46, yaw: -2.13, rim: [.35, 1.6, 1.9], deep: [.01, .16, .3], sig: [.00045, .00045, .00045], fogc: [.6, .38, .14], expo: .57, lift: .014 },
     { c: [3, -27, -10], R: 3.6, yaw: 3.1, rim: [2.6, 1.5, .55], deep: [.5, .35, .7], sig: [.05, .031, .024], fogc: [.004, .09, .22], expo: .55, lift: 0 }
   ];
+  // where each world starts: far enough that the portal reads as a destination, facing it
+  const START = [[-1189, 200, 1233, .9, 0], [16, -31, 27, -.36, .08]];
   for (const p of PT) { p.n = [Math.sin(p.yaw), 0, -Math.cos(p.yaw)]; p.exit = [p.c[0] + p.n[0] * p.R * .9, p.c[1], p.c[2] + p.n[2] * p.R * .9] }
   // shader: a disc framed by a glowing ring; the disc shows the other world's last snapshot, sampled by view direction
   const PS = `
@@ -53,11 +55,12 @@ fn itm(v:vec3f)->vec3f{
   inner=mix(inner,img,e*(1.-smoothstep(.75,1.,r)*.6));}
  inner+=u.rim.rgb*pow(smoothstep(.55,1.,r),3.)*.7;
  let flow=.75+.25*sin(a*7.-t*2.3)+.15*sin(a*13.+t*3.1);
- let ring=exp(-pow((r-1.)/.035,2.))*flow*1.8+exp(-abs(r-1.)*9.)*.35*flow;
+ let rw=max(.035,dist*.003/u.c.w); // keep the ring a couple of pixels wide when seen from far away
+ let ring=exp(-pow((r-1.)/rw,2.))*flow*1.8*sqrt(.035/rw)+exp(-abs(r-1.)*9.)*.35*flow;
  let open=u.t1.w;
- let T=exp(-u.sig.rgb*dist);
+ let T=exp(-u.sig.rgb*dist);let Tr=exp(-u.sig.rgb*dist*.35); // the ring's light carries further than the haze/water would allow
  let al=(1.-smoothstep(.97,1.,r));
- let col=(inner*al+u.rim.rgb*ring*(1.+open*3.))*T+u.fc.rgb*(1.-T)*al;
+ let col=inner*al*T+u.rim.rgb*ring*(1.+open*3.)*Tr+u.fc.rgb*(1.-T)*al;
  return vec4f(col,al);}`;
   const pm = dev.createShaderModule({ code: PS });
   const PBL = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
@@ -87,6 +90,7 @@ fn itm(v:vec3f)->vec3f{
   const snap = i => { const p = PT[i]; C[i].place(p.exit[0], p.exit[1], p.exit[2], p.yaw, 0); C[i].snap() };
   const first = await load(H.cur);
   if (!first) { if (CAP && !BENCH) load(1 - H.cur); return } // capture mode: the page is driven through window.__cap
+  if (!first.bench && !Q.has('fly')) { const s = START[H.cur]; first.place(s[0], s[1], s[2], s[3], 0, s[4]) }
   show();
 
   // ---- input (worlds only read keys/mouse while active)

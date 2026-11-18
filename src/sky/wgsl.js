@@ -298,6 +298,88 @@ fn cpath(c:vec4f,a:f32,ph:f32,va:f32)->vec3f{return c.xyz+vec3f(cos(a)*c.w*(1.+.
  let rim=pow(1.-saturate(dot(n,V)),3.);
  return fin(alb*(SUNC*cloudSh(i.wp)*(saturate(dot(n,L)*.75+.25)+rim*.4*saturate(dot(-V,L)+.3))+amb(n))+em,i.wp,i.pos.xy);}
 `;
+// ---- ground & tree fauna. instance i0 = anchor xyz + size, i1.z = kind (0 deer/fox, 1 rabbit, 2 snail, 3 nesting bird, 4 lizard, 5 glider, 6 nest, 7 chick), rest per kind
+// vertex a0 = pos + w (0 body, 1-4 legs + depth, 5 neck/head + along, 6 tail + along), a1 = colour key + normal. Everything is a pure function of time and the camera.
+// walkers wander a closed loop, slow to graze and bolt from a camera flying low and near; snails crawl a slow ellipse on a bridge deck; nesting birds sit, fly a loop
+// and land (eased); lizards freeze on the bark and dart now and then; gliders cling upside-down under a limb and glide (membrane spread) to another tree and back.
+// (no // comments inside the w`` shader strings: the build collapses whitespace)
+const FAUNA = MAIN + w`
+@group(1)@binding(8)var HM:texture_2d<f32>;
+fn gh(x:f32,z:f32)->f32{
+ let u=clamp((vec2f(x,z)+850.)*(255./1700.),vec2f(0.),vec2f(254.99));let i=vec2i(u);let f=fract(u);
+ return mix(mix(textureLoad(HM,i,0).r,textureLoad(HM,i+vec2i(1,0),0).r,f.x),mix(textureLoad(HM,i+vec2i(0,1),0).r,textureLoad(HM,i+vec2i(1,1),0).r,f.x),f.y);}
+fn hh(x:f32)->f32{return fract(sin(x*91.7+.3)*43758.55);}
+fn wpath(c:vec2f,R:f32,a:f32,sd:f32)->vec2f{return c+R*vec2f(cos(a)*(1.+.3*sin(2.*a+sd)),sin(a)*(1.+.3*cos(3.*a+sd)));}
+struct FO{@builtin(position)pos:vec4f,@location(0)wp:vec3f,@location(1)n:vec3f,@location(2)@interpolate(flat)k:vec2f,@location(3)c:f32}
+@vertex fn vs(@location(0)a0:vec4f,@location(1)a1:vec4f,@location(2)i0:vec4f,@location(3)i1:vec4f,@location(4)i2:vec4f,@location(5)i3:vec4f)->FO{
+ let t=U.cam.w;let K=i1.z;let sz=i0.w;let sd=i3.x;var q=a0.xyz;let n=a1.yzw;let id=floor(a0.w);let fw=fract(a0.w);
+ var P=i0.xyz;var F=vec3f(0.,0.,1.);var Up=vec3f(0.,1.,0.);
+ if(K<1.5){
+  let om=.11+.05*fract(sd*.618);let sp=i1.y;let u=sp*t+.95*sp/om*sin(t*om+sd*6.);let mv=.5+.475*cos(t*om+sd*6.);
+  let a=u/i1.w+i1.x;let p0=wpath(i0.xz,i1.w,a,sd);var hd=normalize(wpath(i0.xz,i1.w,a+.02,sd)-p0+vec2f(1e-5,0.));
+  let dc=p0-U.cam.xz;let dl=length(dc);let ch=U.cam.y-gh(p0.x,p0.y);
+  let fr=select(170.,90.,K>.5);let st=(1.-smoothstep(fr*.25,fr,dl))*(1.-smoothstep(fr*.5,fr*.9,ch));
+  let aw=dc/max(dl,1e-3);var xz=p0+aw*st*fr*.4;let rl=length(xz);if(rl>470.){xz*=470./rl;}
+  hd=normalize(mix(hd,aw,smoothstep(0.,.3,st)));F=vec3f(hd.x,0.,hd.y);P=vec3f(xz.x,gh(xz.x,xz.y),xz.y);
+  let gp=u/sz*select(5.,3.,K>.5)+t*st*select(14.,10.,K>.5);let am=max(mv,st);
+  if(K<.5){
+   if(id>.5&&id<4.5){let o=select(0.,3.1416,id==2.||id==3.);q.z+=sin(gp+o)*.32*fw*am;q.y+=max(0.,-cos(gp+o))*.1*fw*am;}
+   if(id==5.){let g=smoothstep(.5,.1,mv)*(1.-st);q.y-=g*fw*.6;q.z+=g*fw*.14;}
+   if(id==6.){q.x+=sin(t*7.+sd)*.04*fw;}
+  }else{
+   let hp=abs(sin(gp*.5));P.y+=hp*sz*.35*am;
+   if(id==5.){q.z+=sin(t*5.+sd)*.03*fw;}
+   if(id>.5&&id<4.5){q.z-=hp*.12*am;}
+  }
+ }else if(K<2.5){
+  let A=i0.xyz;let B=i2.xyz;let d=B.xz-A.xz;let L=length(d);let T=d/L;let S=vec2f(-T.y,T.x);
+  let th=t*i1.y+i3.y;let s=i1.x+i3.z*cos(th)/L;let xz=mix(A.xz,B.xz,s)+S*(i1.w*sin(th));
+  P=vec3f(xz.x,mix(A.y,B.y,s)+i2.w*4.*s*(1.-s)+.25,xz.y);let hd=normalize(T*(-i3.z*sin(th))+S*(i1.w*cos(th)));F=vec3f(hd.x,0.,hd.y);
+  if(id==1.){q.z*=1.+.1*sin(t*1.3+sd);}
+  if(id==5.){q.x+=sin(t*1.7+sd+q.x*9.)*.05*fw;}
+ }else if(K<3.5){
+  let pr=fract(t/i1.y+i1.x);let fl=step(.3,pr);let qq=max(pr-.3,0.)/.7;let th=6.2832*qq-sin(6.2832*qq);
+  let nn=vec3f(i2.x,0.,i2.y);let m=vec3f(-i2.y,0.,i2.x);let R=i1.w;
+  P=i0.xyz+R*(nn*(1.-cos(th))-m*sin(th))+vec3f(0.,i2.z*(.5-.5*cos(th))+.3*sz,0.);
+  F=normalize(R*(nn*sin(th)-m*cos(th))+vec3f(0.,i2.z*.5*sin(th),0.));
+  let wt=a0.w;let an=sin(t*12.+sd)*.75*fl;q.y+=sin(an)*wt*.9;q.x*=mix(1.,cos(an),wt*.8)*mix(.3,1.,max(fl,1.-wt));
+ }else if(K<4.5){
+  let N=normalize(i2.xyz);let tU=normalize(vec3f(0.,1.,0.)-N*N.y);let tS=cross(N,tU);
+  let z=t/i1.y+sd;let k=floor(z);let tau=fract(z)*i1.y;
+  let o0=(vec2f(hh(k-1.+sd*3.),hh(k-1.+sd*5.+.5))-.5)*vec2f(12.,6.);let o1=(vec2f(hh(k+sd*3.),hh(k+sd*5.+.5))-.5)*vec2f(12.,6.);
+  let o=mix(o0,o1,smoothstep(0.,.7,tau));let mv=1.-step(.7,tau);let dd=o1-o0;
+  P=i0.xyz+tU*o.x+tS*o.y;Up=N;F=normalize(tU*dd.x+tS*dd.y+tU*1e-3);
+  q.x+=sin(t*22.-q.z*7.)*.07*mv;
+ }else if(K<5.5){
+  let A=i0.xyz;let B=i2.xyz;let pr=fract(t/i1.y+i1.x);var s=0.;var g=0.;var gf=0.;var dir=1.;
+  if(pr<.42){s=0.;}else if(pr<.5){g=(pr-.42)/.08;s=g;gf=1.;}else if(pr<.92){s=1.;dir=-1.;}else{g=(pr-.92)/.08;s=1.-g;gf=1.;dir=-1.;}
+  P=mix(A,B,s)-vec3f(0.,i1.w*sin(3.1416*s)+.1*sz*(1.-gf),0.);
+  let hz=normalize((B-A).xz)*dir;F=normalize(vec3f(hz.x,-.25*gf,hz.y));
+  let sp=gf*smoothstep(0.,.15,g)*smoothstep(1.,.85,g);let rl=3.1416*(1.-sp);
+  let R0=normalize(cross(F,vec3f(0.,1.,0.)));let U0=cross(R0,F);Up=U0*cos(rl)-R0*sin(rl);
+  if(a0.w>.5){q.x*=mix(.3,1.,sp);}
+ }else{
+  F=vec3f(sin(i1.x),0.,cos(i1.x));
+  if(K>6.5&&id==5.){let b=max(0.,sin(t*4.+sd*9.));q.y+=b*.08;q.z+=b*.03;}
+ }
+ let Rt=normalize(cross(F,Up));let Uu=cross(Rt,F);
+ var o:FO;o.wp=P+(Rt*q.x+Uu*q.y+F*q.z)*sz;o.pos=U.vp*vec4f(o.wp,1.);o.n=Rt*n.x+Uu*n.y+F*n.z;o.k=vec2f(K,i3.w);o.c=a1.x;return o;}
+@fragment fn fs(i:FO)->@location(0)vec4f{
+ let V=normalize(U.cam.xyz-i.wp);var n=normalize(i.n);if(dot(n,V)<0.){n=-n;}
+ let K=i.k.x;let c=i.c;let nz=textureSampleLevel(N2,SR,i.wp.xz*.09+i.wp.y*.05,0.).r;var alb:vec3f;
+ if(K<.5){
+  let coat=select(vec3f(.56,.36,.19),vec3f(.85,.36,.08),i.k.y>.5)*(.85+.3*nz);
+  alb=select(select(select(vec3f(.72,.64,.52),vec3f(.06,.05,.045),c<.75),vec3f(.9,.86,.78),c<.45),coat,c<.15);
+ }else if(K<1.5){alb=select(select(select(vec3f(.92,.9,.88),vec3f(.85,.55,.52),c<.75),vec3f(.9,.88,.85),c<.45),vec3f(.5,.42,.33)*(.85+.3*nz),c<.15);}
+ else if(K<2.5){alb=select(mix(vec3f(.42,.2,.07),vec3f(.88,.72,.45),step(.5,fract(c*7.))),vec3f(.62,.56,.44),c<.5);}
+ else if(K<3.5){alb=mix(vec3f(.1,.28,.75),vec3f(.98,.52,.16),smoothstep(.15,.5,c));if(c>.98){alb=vec3f(.05,.07,.15);}}
+ else if(K<4.5){alb=mix(mix(vec3f(.06,.045,.03),vec3f(.3,.21,.13),nz)*(.8+.4*textureSampleLevel(N2,SR,i.wp.xy*.31+i.wp.zz*.17,0.).g),vec3f(.06,.17,.07),.12);}
+ else if(K<5.5){alb=select(vec3f(.46,.37,.29),vec3f(.62,.5,.38),c>.4)*(.85+.3*nz);}
+ else if(K<6.5){alb=mix(vec3f(.12,.08,.05),vec3f(.45,.32,.18),nz);}
+ else{alb=select(vec3f(.62,.6,.56)*(.9+.2*nz),vec3f(1.,.6,.1),c>.8);}
+ let L=U.sun.xyz;let sh=shadow(i.wp,n,dot(i.wp-U.cam.xyz,U.cf.xyz))*cloudSh(i.wp);let rim=pow(1.-saturate(dot(n,V)),3.);
+ return fin(alb*(SUNC*sh*(saturate(dot(n,L)*.8+.2)+rim*.3)+amb(n)),i.wp,i.pos.xy);}
+`;
 // ---- pollen + thermal motes
 const PART = UD + w`
 struct QO{@builtin(position)pos:vec4f,@location(0)uv:vec2f,@location(1)@interpolate(flat)c:vec4f}

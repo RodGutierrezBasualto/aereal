@@ -11,7 +11,7 @@ const main = async (H, ID) => {
   const mkbuf = (d, u) => { const b = dev.createBuffer({ size: (d.byteLength + 3) & ~3, usage: u | BU.COPY_DST }); q.writeBuffer(b, 0, d.buffer || d, d.byteOffset || 0, d.byteLength); return b };
   const split = it => { const n = it.length / 8, f = new Float32Array(n * 4), i = new Int32Array(n * 4); for (let k = 0; k < n; k++) { f.set(it.subarray(k * 8, k * 8 + 4), k * 4); i[k * 4] = it[k * 8 + 4]; i[k * 4 + 1] = it[k * 8 + 5]; i[k * 4 + 2] = it[k * 8 + 6] } return [f, i, n] };
   // geometry
-  const B = { vb: mkbuf(W.vb, BU.VERTEX), ib: mkbuf(W.ib, BU.INDEX), cmv: mkbuf(W.cm.v, BU.VERTEX), cmi: mkbuf(W.cm.i, BU.INDEX), cli: mkbuf(W.cl.d, BU.VERTEX), fern: mkbuf(W.fern, BU.VERTEX), tuft: mkbuf(W.tuft, BU.VERTEX), pli: mkbuf(W.pl.d, BU.VERTEX), tui: mkbuf(W.tu.d, BU.VERTEX), vii: mkbuf(W.vi.d, BU.VERTEX), bird: mkbuf(W.bird, BU.VERTEX), ray: mkbuf(W.ray, BU.VERTEX), bfly: mkbuf(W.bfly, BU.VERTEX), cri: mkbuf(W.cr, BU.VERTEX), pai: mkbuf(W.pa, BU.VERTEX) };
+  const B = { vb: mkbuf(W.vb, BU.VERTEX), ib: mkbuf(W.ib, BU.INDEX), cmv: mkbuf(W.cm.v, BU.VERTEX), cmi: mkbuf(W.cm.i, BU.INDEX), cli: mkbuf(W.cl.d, BU.VERTEX), fern: mkbuf(W.fern, BU.VERTEX), tuft: mkbuf(W.tuft, BU.VERTEX), pli: mkbuf(W.pl.d, BU.VERTEX), tui: mkbuf(W.tu.d, BU.VERTEX), vii: mkbuf(W.vi.d, BU.VERTEX), bird: mkbuf(W.bird, BU.VERTEX), ray: mkbuf(W.ray, BU.VERTEX), bfly: mkbuf(W.bfly, BU.VERTEX), fai: mkbuf(W.fa.d, BU.VERTEX), cri: mkbuf(W.cr, BU.VERTEX), pai: mkbuf(W.pa, BU.VERTEX) };
   const [solF, solI, nSol] = split(W.items), [clF, clI, nCl] = split(W.cl.it), [plF, plI, nPl] = split(W.pl.it), [tuF, tuI, nTu] = split(W.tu.it), [viF, viI, nVi] = split(W.vi.it);
   const CORE = W.cm.core, NFERN = W.fern.length / 32 * 6, NTUFT = W.tuft.length / 8, NBIRD = W.bird.length / 8, NRAY = W.ray.length / 8, NB = W.nb, NR = W.nr, NF = W.cr.length / 12 - NB - NR, NBF = W.bfly.length / 8, NPA = W.pa.length / 8;
   // uniforms
@@ -27,20 +27,22 @@ const main = async (H, ID) => {
   const SL = dev.createSampler({ magFilter: 'linear', minFilter: 'linear' }), SC = dev.createSampler({ compare: 'less-equal', magFilter: 'linear', minFilter: 'linear' });
   // layouts & pipelines
   const L0 = dev.createBindGroupLayout({ entries: [0, 1, 2].map(b => ({ binding: b, visibility: VF, buffer: {} })) });
-  const L1 = dev.createBindGroupLayout({ entries: [{ binding: 0, visibility: VF, texture: {} }, { binding: 1, visibility: VF, texture: { viewDimension: '3d' } }, { binding: 2, visibility: VF, sampler: {} }, { binding: 3, visibility: VF, texture: { sampleType: 'depth', viewDimension: '2d-array' } }, { binding: 4, visibility: VF, sampler: { type: 'comparison' } }, { binding: 5, visibility: VF, texture: {} }, { binding: 6, visibility: VF, texture: {} }, { binding: 7, visibility: VF, sampler: {} }] });
+  const FMB = W.fa.g.map(([k]) => k == 'bird' ? B.bird : mkbuf(W.fm[k], BU.VERTEX)), FG = new Int32Array(W.fa.g.flatMap(([k, f, n]) => [(k == 'bird' ? W.bird : W.fm[k]).length / 8, n, f])), NFG = W.fa.g.length; // fauna: per group vertex count, instances, first
+  const hm = dev.createTexture({ size: [256, 256], format: 'r32float', usage: TU.TEXTURE_BINDING | TU.COPY_DST }); q.writeTexture({ texture: hm }, W.hm, { bytesPerRow: 1024 }, [256, 256]); const hmv = hm.createView();
+  const L1 = dev.createBindGroupLayout({ entries: [{ binding: 0, visibility: VF, texture: {} }, { binding: 1, visibility: VF, texture: { viewDimension: '3d' } }, { binding: 2, visibility: VF, sampler: {} }, { binding: 3, visibility: VF, texture: { sampleType: 'depth', viewDimension: '2d-array' } }, { binding: 4, visibility: VF, sampler: { type: 'comparison' } }, { binding: 5, visibility: VF, texture: {} }, { binding: 6, visibility: VF, texture: {} }, { binding: 7, visibility: VF, sampler: {} }, { binding: 8, visibility: VF, texture: { sampleType: 'unfilterable-float' } }] });
   const L1s = dev.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: {} }] });
   const PLm = dev.createPipelineLayout({ bindGroupLayouts: [L0, L1] }), PLs = dev.createPipelineLayout({ bindGroupLayouts: [L0, L1s] });
   const mod = code => dev.createShaderModule({ code });
   const va = (arrayStride, stepMode, l0, n) => ({ arrayStride, stepMode, attributes: Array.from({ length: n }, (_, i) => ({ shaderLocation: l0 + i, offset: i * 16, format: 'float32x4' })) });
   const VSO = [{ arrayStride: 24, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'snorm16x4' }, { shaderLocation: 2, offset: 20, format: 'uint8x4' }] }];
-  const VMI = [va(32, 'vertex', 0, 2), va(32, 'instance', 2, 2)], VCR = [va(32, 'vertex', 0, 2), va(48, 'instance', 2, 3)], VVI = [va(48, 'instance', 0, 3)], VPA = [va(32, 'instance', 0, 2)];
+  const VMI = [va(32, 'vertex', 0, 2), va(32, 'instance', 2, 2)], VCR = [va(32, 'vertex', 0, 2), va(48, 'instance', 2, 3)], VVI = [va(48, 'instance', 0, 3)], VPA = [va(32, 'instance', 0, 2)], VFA = [va(32, 'vertex', 0, 2), va(64, 'instance', 2, 4)];
   const DS = { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'greater' }, DSN = { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'greater' };
   const mainP = (code, buffers, o = {}) => { const m = mod(code); return dev.createRenderPipeline({ layout: PLm, vertex: { module: m, buffers }, fragment: { module: m, targets: [{ format: 'rgba16float', blend: o.blend }] }, primitive: { topology: o.strip ? 'triangle-strip' : 'triangle-list', cullMode: 'none' }, depthStencil: o.ds || DS, multisample: { count: 4, alphaToCoverageEnabled: !!o.a2c } }) };
   const shP = (code, buffers) => dev.createRenderPipeline({ layout: PLs, vertex: { module: mod(code), buffers }, primitive: { cullMode: 'none' }, depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less', depthBiasSlopeScale: 2 } });
   const postP = (code, fm, blend) => { const m = mod(code); return dev.createRenderPipeline({ layout: 'auto', vertex: { module: m }, fragment: { module: m, targets: fm.map(format => ({ format, blend })) } }) };
   const ADD = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } }, PMA = { color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' } };
   const P = {
-    sky: mainP(SKY, [], { ds: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'always' } }), sol: mainP(SOL, VSO), leaf: mainP(LEAF, VMI), plant: mainP(PLANT, VMI), crea: mainP(CREA, VCR),
+    sky: mainP(SKY, [], { ds: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'always' } }), sol: mainP(SOL, VSO), leaf: mainP(LEAF, VMI), plant: mainP(PLANT, VMI), crea: mainP(CREA, VCR), fauna: mainP(FAUNA, VFA),
     vine: mainP(VINE, VVI, { strip: 1, blend: PMA, ds: DSN }), part: mainP(PART, VPA, { strip: 1, blend: ADD, ds: DSN }),
     solS: shP(SOLS, VSO), leafS: shP(LEAFS, VMI),
     res: postP(RESO, ['rgba16float', 'r16float']), cloud: postP(CLOUD, ['rgba16float', 'r16float']), rays: postP(RAYS, ['rgba16float']), rayb: postP(RAYB, ['rgba16float']),
@@ -67,7 +69,7 @@ const main = async (H, ID) => {
     tx('bl', hw, hh, 'rgba16float', 1, NBL); const bv = Array.from({ length: NBL }, (_, i) => T.bl.createView({ baseMipLevel: i, mipLevelCount: 1 }));
     PD.cloud.colorAttachments[0].view = ct; PD.cloud.colorAttachments[1].view = cd; PD.main.colorAttachments[0].view = mc; PD.main.depthStencilAttachment.view = md;
     PD.res.colorAttachments[0].view = hd; PD.res.colorAttachments[1].view = ld; PD.rays.colorAttachments[0].view = ry; PD.rayb.colorAttachments[0].view = r2; BGrayb = bg(P.rayb.getBindGroupLayout(0), [[0, ry], [1, ld]]);
-    BGm = bg(L1, [[0, n2v], [1, n3v], [2, SR], [3, smv], [4, SC], [5, ct], [6, cd], [7, SL]]);
+    BGm = bg(L1, [[0, n2v], [1, n3v], [2, SR], [3, smv], [4, SC], [5, ct], [6, cd], [7, SL], [8, hmv]]);
     BGres = bg(P.res.getBindGroupLayout(0), [[0, ubuf], [3, mc], [4, md]]);
     BGrays = bg(P.rays.getBindGroupLayout(0), [[0, ubuf], [2, stbuf], [3, n2v], [4, n3v], [5, SR], [6, smv], [7, SC], [8, ld]]);
     BGfin = bg(P.fin.getBindGroupLayout(0), [[0, ubuf], [3, hd], [4, r2], [5, ld], [6, bv[0]], [7, SL]]);
@@ -197,6 +199,7 @@ const main = async (H, ID) => {
     p.setPipeline(P.plant); p.setVertexBuffer(0, B.tuft); p.setVertexBuffer(1, B.tui);
     if (!(IM[4] & 16)) for (let k = 0; k < nTu; k++)if (inFr(tuF, k * 4) && near(tuF, k * 4, 1000)) p.draw(NTUFT, tuI[k * 4 + 1], 0, tuI[k * 4]);
     p.setPipeline(P.crea); p.setVertexBuffer(1, B.cri); p.setVertexBuffer(0, B.bird); p.draw(NBIRD, NB, 0, 0); p.setVertexBuffer(0, B.ray); p.draw(NRAY, NR, 0, NB); p.setVertexBuffer(0, B.bfly); p.draw(NBF, NF, 0, NB + NR);
+    p.setPipeline(P.fauna); p.setVertexBuffer(1, B.fai); for (let k = 0; k < NFG; k++) { const o = k * 3; if (FG[o + 1]) { p.setVertexBuffer(0, FMB[k]); p.draw(FG[o], FG[o + 1], 0, FG[o + 2]) } }
     p.setPipeline(P.vine); p.setVertexBuffer(0, B.vii);
     for (let k = 0; k < nVi; k++)if (inFr(viF, k * 4) && near(viF, k * 4, 2800)) p.draw(50, viI[k * 4 + 1], 0, viI[k * 4]);
     p.setPipeline(P.part); p.setVertexBuffer(0, B.pai); p.draw(4, NPA);
@@ -216,7 +219,7 @@ const main = async (H, ID) => {
   }
 
   // ---------- modes
-  const HELP = 'Click to fly  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F guided tour  ·  P portal to the sea';
+  const HELP = 'Click to fly  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F guided tour\nFly into the glowing ring (or press P) to dive into the sea';
   if (CAP) {
     const st = () => [S[0], S[1], S[2], S[3], S[4], S[5]].map(v => +v.toFixed(2));
     window.__cap = { set(x, y, z, yaw, pit, t) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = pit; S[5] = t; frame(); return st() }, pose(i) { S.set(POSES.subarray(i * 6, i * 6 + 6)); frame(); return st() }, fly(t) { S[15] = S[5] = t; flyCam(); frame(); return st() }, png: () => cv.toDataURL(), async gpu(mask) { IM[4] = mask; let a = 0; for (let i = 0; i < 6; i++) { frame(); await q.onSubmittedWorkDone(); await new Promise(r => setTimeout(r, 30)); if (i > 1) a += S[63] } IM[4] = 0; return +(a / 4).toFixed(1) }, jpg: j => cv.toDataURL('image/jpeg', j), gs: W.gs, W, S };
@@ -242,7 +245,7 @@ const main = async (H, ID) => {
   return {
     name: 'Aereal', help: HELP, tanY: S[10], bench: BENCH,
     tick() { S[62] = H.T[0]; step(); frame() }, // host loop writes rAF time into H.T[0]
-    place(x, y, z, yaw, v) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = 0; IM[0] = 0; camBasis(); S[6] = S[16] * v; S[7] = S[17] * v; S[8] = S[18] * v },
+    place(x, y, z, yaw, v, pit = 0) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = pit; IM[0] = 0; camBasis(); S[6] = S[16] * v; S[7] = S[17] * v; S[8] = S[18] * v },
     speed: 50, enter() { if (!Q.get('w')) fit(); else { cv.width = WD; cv.height = HT } S[61] = performance.now() }, leave() { K.fill(0) },
     snap() { H.snapView = H.peek(ID, WD, HT); frame(); H.snapView = null }
   };

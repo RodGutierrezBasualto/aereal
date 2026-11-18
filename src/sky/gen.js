@@ -157,6 +157,7 @@ function rock(M, x, y, z, r, g, seed) {
   M.norm(v0, i0);
 }
 function bridge(W, A, B, w, rise, na, gap) {
+  (W.br = W.br || []).push([A, B, w, rise, gap]);
   const M = W.M, i0 = M.ni, v0 = M.nv, n = na * 16 + 1, dx = B[0] - A[0], dz = B[2] - A[2], L = sqrt(dx * dx + dz * dz), T = [dx / L, 0, dz / L], S = [-T[2], 0, T[0]];
   const ring = (s, jag) => {
     const c = [mix(A[0], B[0], s), mix(A[1], B[1], s) + rise * 4 * s * (1 - s), mix(A[2], B[2], s)], hp = (round(s * (n - 1)) & 3) < 2 ? 3.6 : 2, un = 7, pw = .82;
@@ -283,6 +284,55 @@ function butterflyMesh() { // forward +z, half-span 1; a0 = pos + |x|, a1 = (0 b
   for (const [a, b] of [[[0, .04], [0, -.04]], [[.035, 0], [-.035, 0]]]) { const n = a[0] ? up : [1, 0, 0]; P(a[0], a[1], .4, 0, n); P(b[0], b[1], .4, 0, n); P(a[0], a[1], -.45, 0, n); P(b[0], b[1], .4, 0, n); P(b[0], b[1], -.45, 0, n); P(a[0], a[1], -.45, 0, n) }
   return new Float32Array(v);
 }
+// ---------- fauna meshes: triangle lists, 8 floats/vertex = pos, w (animation part: 0 body, 1-4 legs + depth, 5 neck/head + along, 6 tail + along), c (colour key), normal
+function FM() { this.v = [] }
+FM.prototype.pt = function (p, n, W) { this.v.push(p[0], p[1], p[2], W[0], W[1], n[0], n[1], n[2]) };
+FM.prototype.blob = function (C, r, wc, nu = 10, nv = 7) { // ellipsoid; wc: [w, c] or p => [w, c]
+  const P = (i, j) => { const th = i / nu * TAU, ph = j / nv * PI, d = [sin(ph) * cos(th), cos(ph), sin(ph) * sin(th)]; return [[C[0] + d[0] * r[0], C[1] + d[1] * r[1], C[2] + d[2] * r[2]], nrm([d[0] / r[0], d[1] / r[1], d[2] / r[2]])] };
+  for (let j = 0; j < nv; j++)for (let i = 0; i < nu; i++) { const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1); for (const q of [a, c, b, a, d, c]) this.pt(q[0], q[1], typeof wc == 'function' ? wc(q[0]) : wc) }
+};
+FM.prototype.tube = function (P, R, wc, sd = 5) { // wc(k) per ring
+  const rg = []; let N = null;
+  for (let k = 0; k < P.length; k++) {
+    const a = P[max(k - 1, 0)], b = P[min(k + 1, P.length - 1)], T = nrm([b[0] - a[0], b[1] - a[1], b[2] - a[2]]); if (!N) N = abs(T[1]) > .9 ? [1, 0, 0] : [0, 1, 0];
+    const d = N[0] * T[0] + N[1] * T[1] + N[2] * T[2]; N = nrm([N[0] - T[0] * d, N[1] - T[1] * d, N[2] - T[2] * d]); const B = crs(T, N), r = [];
+    for (let s = 0; s <= sd; s++) { const th = s / sd * TAU, n = [N[0] * cos(th) + B[0] * sin(th), N[1] * cos(th) + B[1] * sin(th), N[2] * cos(th) + B[2] * sin(th)]; r.push([[P[k][0] + n[0] * R[k], P[k][1] + n[1] * R[k], P[k][2] + n[2] * R[k]], n]) }
+    rg.push(r);
+  }
+  for (let k = 0; k + 1 < P.length; k++) { const w0 = wc(k), w1 = wc(k + 1); for (let s = 0; s < sd; s++) { const a = rg[k][s], b = rg[k][s + 1], c = rg[k + 1][s + 1], d = rg[k + 1][s]; for (const [q, W] of [[a, w0], [b, w0], [c, w1], [a, w0], [c, w1], [d, w1]]) this.pt(q[0], q[1], W) } }
+};
+FM.prototype.tri = function (a, b, c, W) { const n = nrm(crs([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]])); for (const p of [a, b, c]) this.pt(p, n, typeof W[0] == 'object' ? W[[a, b, c].indexOf(p)] : W) };
+function faunaMeshes() {
+  const quad = fx => { // deer (fx 0) / fox (fx 1). colour keys: 0 coat, .3 white, .6 dark, .9 antler
+    const m = new FM(), H = fx ? .3 : .72, Lg = fx ? .27 : .62, bl = fx ? .3 : .42, bw = fx ? .1 : .15;
+    m.blob([0, H, 0], [bw, fx ? .1 : .16, bl], p => [0, p[1] < H - (fx ? .05 : .09) ? .3 : 0]);
+    [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([sx, sz], k) => { const x = sx * bw * .62, z = sz * bl * .68, P = [[x, H - .02, z], [x, H - Lg * .5, z + (sz < 0 ? -.06 : .02)], [x, H - Lg * .92, z], [x, H - Lg, z + .015]], R = fx ? [.035, .026, .02, .02] : [.05, .034, .024, .022]; m.tube(P, R, i => [k + 1 + .99 * i / 3, i == 3 ? .6 : fx && i > 0 ? .6 : 0]) });
+    const nb = [0, H + .04, bl * .78], hd = fx ? [0, H + .12, bl + .16] : [0, H + .38, bl + .18];
+    m.tube([nb, [0, (nb[1] + hd[1]) / 2, (nb[2] + hd[2]) / 2 + .02], hd], fx ? [.07, .06, .055] : [.08, .065, .055], i => [5 + .45 * i, 0]);
+    m.blob([hd[0], hd[1] + .02, hd[2] + (fx ? .06 : .07)], fx ? [.06, .055, .12] : [.065, .07, .14], p => [5.99, p[2] > hd[2] + (fx ? .16 : .19) ? .6 : 0]);
+    for (const s of [-1, 1]) {
+      m.tri([s * .035, hd[1] + .07, hd[2]], [s * (fx ? .07 : .1), hd[1] + (fx ? .17 : .13), hd[2] - .02], [s * .05, hd[1] + .06, hd[2] - .05], [5.99, fx ? .6 : 0]);
+      if (!fx) { const b = [s * .03, hd[1] + .09, hd[2] - .01]; m.tube([b, [s * .08, hd[1] + .25, hd[2] - .04], [s * .14, hd[1] + .38, hd[2] + .02]], [.014, .011, .006], () => [5.99, .9], 4); m.tube([[s * .075, hd[1] + .22, hd[2] - .03], [s * .05, hd[1] + .33, hd[2] + .06]], [.009, .005], () => [5.99, .9], 4) }
+    }
+    if (fx) { m.blob([0, H + .02, -bl - .16], [.07, .07, .2], p => [6.5, p[2] < -bl - .3 ? .3 : 0]) } else m.blob([0, H + .06, -bl - .02], [.04, .05, .05], [6.5, .3]);
+    return new Float32Array(m.v);
+  };
+  const rabbit = () => { const m = new FM(); m.blob([0, .17, 0], [.11, .12, .17], p => [0, p[1] < .09 ? .3 : 0]); m.blob([0, .29, .15], [.075, .075, .085], [5.5, 0]);
+    for (const s of [-1, 1]) { m.blob([s * .03, .43, .12], [.017, .1, .035], p => [5.99, abs(p[0]) < .03 && p[2] > .12 ? .6 : 0]); m.blob([s * .08, .08, -.06], [.04, .07, .11], [3.5, 0]); m.blob([s * .05, .05, .12], [.025, .05, .03], [1.5, 0]) }
+    m.blob([0, .2, -.18], [.04, .04, .04], [6.5, .3]); return new Float32Array(m.v) };
+  const snail = () => { const m = new FM(); m.blob([0, .36, -.06], [.24, .27, .27], p => [0, .5 + .49 * ((atan2(p[2] + .06, p[1] - .36) / TAU + .5 + sqrt((p[2] + .06) ** 2 + (p[1] - .36) ** 2) * 2.5) % 1)], 14, 10);
+    m.blob([0, .06, .08], [.11, .06, .42], [1, .2]); for (const s of [-1, 1]) { m.tube([[s * .035, .1, .42], [s * .05, .2, .47], [s * .06, .3, .5]], [.016, .013, .011], i => [5 + .45 * i, .1], 4); m.blob([s * .06, .31, .5], [.022, .022, .022], [5.99, .1], 6, 4) } return new Float32Array(m.v) };
+  const lizard = () => { const m = new FM(); m.blob([0, .05, 0], [.09, .045, .28], [0, 0]); m.blob([0, .05, .34], [.065, .04, .1], [5.5, 0]);
+    m.tube([[0, .045, -.24], [0, .035, -.5], [0, .025, -.75], [0, .015, -.95]], [.05, .035, .02, .006], i => [6 + .33 * i, 0]);
+    [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([sx, sz], k) => m.tube([[sx * .07, .04, sz * .16], [sx * .17, .03, sz * .2], [sx * .2, .005, sz * .27]], [.022, .016, .012], i => [k + 1 + .49 * i, 0], 4)); return new Float32Array(m.v) };
+  const glider = () => { const m = new FM(); m.blob([0, 0, 0], [.11, .08, .26], [0, 0]); m.blob([0, .02, .3], [.075, .065, .09], [5.5, 0]); m.blob([0, 0, -.45], [.08, .025, .22], [6.5, .3]);
+    for (const s of [-1, 1]) { m.blob([s * .045, .08, .33], [.02, .03, .015], [5.99, 0], 6, 4); const I = (z) => [s * .09, 0, z], O = (z) => [s * .4, -.01, z], wi = [0, .5], wo = [1, .5]; m.tri(I(.18), O(.2), O(0), [wi, wo, wo]); m.tri(I(.18), O(0), I(-.18), [wi, wo, wi]); m.tri(I(-.18), O(0), O(-.2), [wi, wo, wo]) }
+    return new Float32Array(m.v) };
+  const nest = () => { const m = new FM(); for (let i = 0; i < 9; i++) { const a = i / 9 * TAU, b = (i + 1.3) / 9 * TAU; m.tube([[cos(a) * .42, .12, sin(a) * .42], [cos((a + b) / 2) * .5, .2, sin((a + b) / 2) * .5], [cos(b) * .42, .14, sin(b) * .42]], [.09, .12, .09], () => [0, 0], 6) } m.blob([0, .02, 0], [.44, .1, .44], [0, 0]); return new Float32Array(m.v) };
+  const chick = () => { const m = new FM(); m.blob([0, .1, 0], [.09, .09, .09], [0, .3]); m.blob([0, .21, .03], [.065, .065, .065], [5.5, .3]);
+    m.tri([-.025, .22, .08], [.025, .22, .08], [0, .225, .16], [5.99, .9]); m.tri([.022, .2, .08], [-.022, .2, .08], [0, .165, .14], [5.99, .9]); return new Float32Array(m.v) };
+  return { deer: quad(0), fox: quad(1), rabbit: rabbit(), snail: snail(), lizard: lizard(), glider: glider(), nest: nest(), chick: chick() };
+}
 function rayMesh() {
   const v = [], P = (x, y, z, w, c) => v.push(x, y, z, w, c, x * .3, 1, 0), T = (a, b, c) => { P(...a); P(...b); P(...c) };
   const xs = [0, .12, .3, .55, .8, 1], le = [.44, .43, .34, .14, -.12, -.34], te = [-.42, -.38, -.31, -.27, -.3, -.38], dr = x => -.16 * x * x;
@@ -305,7 +355,7 @@ function genWorld() {
   const CL = new Bk(8), PL = new Bk(8), TU = new Bk(8), VI = new Bk(12), CR = [], PA = [];
   W.vine = (k, a, b, sag, sw, free, g) => VI.add(k, [a[0], a[1], a[2], sw, b[0], b[1], b[2], sag, rng(), g, free, rng()]);
   W.plant = (k, p, s, sw, kind, g) => kind ? TU.add(k, [p[0], p[1], p[2], s, rng() * TAU, rng(), g, kind + sw * .5]) : PL.add(k, [p[0], p[1], p[2], s, -1, rng(), g, sw]);
-  const GC = [], TB = []; // golden canopy clusters + trunk bases on the home island (moths, butterflies)
+  const GC = [], TB = [], LB = [], LZ = [], FR = RNG(4242); // home island: golden canopy clusters, trunk bases, big-limb samples, trunk-bark spots; FR = fauna-only random stream
   const cluster = (k, x, y, z, r, kind, sw, g) => { CL.add(k, [x, y, z, r, kind, rng(), g, sw]); W.sph.push(x, y, z, r); if (kind > .7 && /^g[0-6]$/.test(k)) GC.push(x, y, z, r) };
   const grp = (I, yaw, ax, ay, az, spin, rate) => { const o = W.ng * 12; W.grp.set([I[0], I[1], I[2], yaw, ax, ay, az, rng() * 9, spin, rate, 0, 0], o); return W.ng++ };
   const hole = (x, z) => sst(170, 110, sqrt(x * x + (z - 400) ** 2));
@@ -353,7 +403,7 @@ function genWorld() {
     const lx = (rng() - .5) * .5, lz = (rng() - .5) * .5, K = 4 + (rng() * 3 | 0), ph = rng() * TAU, spread = .85 + .5 * rng(), wob = R0 * (.6 + rng());
     const tp = t => [bx + lx * tl * t * t + sin(t * 4 + ph) * wob * t, by + tl * t, bz + lz * tl * t * t + cos(t * 3.3 + ph) * wob * t];
     for (let i = 0; i <= 16; i++) { const t = i / 16, c = tp(t); P.push(c[0], c[1] - R0 * 1.2 * (1 - t), c[2], R0 * (1 + 2.1 * exp(-7 * t)) * (1 - .3 * t), 0) }
-    tube(M, P, 28, 2, 255, g, (th, t) => 1 + .6 * exp(-5 * t) * pow(.5 + .5 * cos(th * K + ph + t * 2), 2) + .1 * cos(th * K + ph + t * 7) + .2 * (vn(cos(th) * 3 + bx, t * 9, sin(th) * 3) - .5), 0);
+    const tv0 = M.nv; tube(M, P, 28, 2, 255, g, (th, t) => 1 + .6 * exp(-5 * t) * pow(.5 + .5 * cos(th * K + ph + t * 2), 2) + .1 * cos(th * K + ph + t * 7) + .2 * (vn(cos(th) * 3 + bx, t * 9, sin(th) * 3) - .5), 0); const tv1 = M.nv;
     for (let k = 0; k < 8; k++) { const a0 = k / 8 * TAU + rng() * .6, l = R0 * (2.2 + 2.6 * rng()), bend = (rng() - .5) * 2.2, wv = rng() * 9, Q = []; for (let j = 0; j <= 9; j++) { const t = j / 9, a = a0 + bend * t * t, d = R0 * .8 + l * t, w = sin(t * 5 + wv) * R0 * .35 * t; Q.push(bx + cos(a) * d - sin(a) * w, by + R0 * 2.4 * pow(1 - t, 2.6) - R0 * .6 * t, bz + sin(a) * d + cos(a) * w, R0 * mix(.62, .07, pow(t, .7)), 0) } tube(M, Q, 9, 2, 235, g, null, 1) }
     W.cap.push(bx, by, bz, ...tp(1), R0 * 1.5);
     const sa = ship && [cos(SH[4]) * sin(SH[3]), sin(SH[4]), -cos(SH[4]) * cos(SH[3])], sc = ship && [bx + SH[0], by + SH[1], bz + SH[2]];
@@ -367,6 +417,7 @@ function genWorld() {
       if (lvl < 3) for (let i = 0; i < ns; i++) { const o = i * 5; W.cap.push(Q[o], Q[o + 1], Q[o + 2], Q[o + 5], Q[o + 6], Q[o + 7], Q[o + 3]) }
       if (bare) return;
       const at = t => { const i = min(ns - 1, floor(t * ns)), o = i * 5; return [[Q[o], Q[o + 1], Q[o + 2]], nrm([Q[o + 5] - Q[o], Q[o + 6] - Q[o + 1], Q[o + 7] - Q[o + 2]]), Q[o + 3], Q[o + 4]] };
+      if (lvl == 1 && ti < 7) for (const t of [.3, .45]) { const [q, tg, r] = at(t); LB.push([ti, q[0], q[1], q[2], r, tg[0], tg[1], tg[2]]) }
       if (lvl < 3) {
         const nc = 3;
         for (let c = 0; c <= nc; c++) {
@@ -386,6 +437,7 @@ function genWorld() {
     for (let k = 0; k < nl; k++) { const f = k / (nl - 1), az = k * 2.39996 + rng() * .7 + ph, el = mix(-.02, .5, f) + rng() * .18, t = mix(.5, .97, f) + (rng() - .5) * .06; limb(tp(t), [cos(az) * cos(el), sin(el), sin(az) * cos(el)], H * mix(.36, .24, f) * spread * (k == hero ? 1.3 : .8 + .35 * rng()), R0 * (1 - .3 * t) * mix(.55, .42, f), 1, 0) }
     limb(tp(1), nrm([lx * .5, 1, lz * .5]), H * .26, R0 * .7 * .7, 1, 0);
     M.norm(v0, i0); M.item(i0, I.pad);
+    if (ti < 7) for (let k = 0, n = 0; k < 600 && n < 4; k++) { const v = tv0 + (FR() * (tv1 - tv0) | 0), y = M.p[v * 3 + 1], ny = M.n[v * 4 + 1]; if (y < by + 15 || y > by + 150 || abs(ny) > .3) continue; LZ.push([M.p[v * 3], y, M.p[v * 3 + 2], M.n[v * 4], ny, M.n[v * 4 + 2]]); n++ }
     return by;
   };
   const GT = [[home, 70, -110, 680], [home, -310, -220, 550], [home, 330, 160, 510], [home, -270, 250, 490], [home, 360, -310, 460], [home, -440, 30, 430], [home, 30, -430, 470], [east, 60 + 1090, 400 - 70, 400], [east, 1090 - 120, 400 + 110, 350], [far, 1820, 1020, 360]];
@@ -464,18 +516,42 @@ function genWorld() {
   for (let i = 0; i < 5000; i++)PA.push(rng() * 180, rng() * 180, rng() * 180, .06 + rng() * .07, rng(), 0, rng(), rng());
   TH.forEach((t, k) => { for (let i = 0; i < 1500; i++)PA.push(t[0], -620, t[1], .7 + rng() * 1.1, rng(), 1, .5 + rng(), sqrt(rng()) * t[2] * .8) });
   // butterflies (creature kind 2 + hue) over the home island meadows, around the trunks and on the rim facing the spawn
-  const gH = (x, z) => topY(home, x, z, isR(home, x, z)), bfly = (x, z, R, n) => { const y = gH(x, z) + 30 + rng() * 30; for (let i = 0; i < n; i++)CR.push(x, y, z, R * (.6 + .6 * rng()), rng() * TAU, 6 + 5 * rng(), 2 + min(rng(), .999), 2.2 + rng(), (rng() - .5) * R * .6, (rng() - .5) * 16, rng() * TAU, 10 + rng() * 14) };
+  const gH = (x, z) => topY(home, x, z, isR(home, x, z)), bfly = (x, z, R, n) => { const y = gH(x, z) + 30 + FR() * 30; for (let i = 0; i < n; i++)CR.push(x, y, z, R * (.6 + .6 * FR()), FR() * TAU, 6 + 5 * FR(), 2 + min(FR(), .999), 2.2 + FR(), (FR() - .5) * R * .6, (FR() - .5) * 16, FR() * TAU, 10 + FR() * 14) };
   const open = (x, z) => isR(home, x, z) < .82 && TB.every(b => (x - b[0]) ** 2 + (z - b[2]) ** 2 > 230 * 230); // meadow clear of the giant trunks and roots
-  for (let j = 0, k = 0; j < 22 && k < 4000; k++) { const near = j < 6, a = near ? 2.26 + (rng() - .5) * .9 : rng() * TAU, r = 640 * (near ? .5 + .3 * rng() : sqrt(rng()) * .82), x = cos(a) * r, z = sin(a) * r; if (!open(x, z)) continue; bfly(x, z, 30 + rng() * 20, 6 + (rng() * 4 | 0)); j++ }
+  for (let j = 0, k = 0; j < 22 && k < 4000; k++) { const near = j < 6, a = near ? 2.26 + (FR() - .5) * .9 : FR() * TAU, r = 640 * (near ? .5 + .3 * FR() : sqrt(FR()) * .82), x = cos(a) * r, z = sin(a) * r; if (!open(x, z)) continue; bfly(x, z, 30 + FR() * 20, 6 + (FR() * 4 | 0)); j++ }
   // golden moth swarms circling the canopies (particle mode 2: centre, size | orbit radius, mode, speed, seed)
-  for (let s = 0; s < 90; s++) { const k = (rng() * GC.length / 4 | 0) * 4, r = GC[k + 3]; for (let i = 0; i < 32; i++)PA.push(GC[k], GC[k + 1], GC[k + 2], .45 + rng() * .35, r * (1.25 + .7 * rng()), 2, rng(), rng()) }
+  for (let s = 0; s < 90; s++) { const k = (FR() * GC.length / 4 | 0) * 4, r = GC[k + 3]; for (let i = 0; i < 32; i++)PA.push(GC[k], GC[k + 1], GC[k + 2], .45 + FR() * .35, r * (1.25 + .7 * FR()), 2, FR(), FR()) }
+  // ground & tree fauna (FAUNA pipeline; instance = 4 vec4: see the shader). groups: deer, fox, rabbit, snail, bird, lizard, glider, nest, chick
+  const FA = [[], [], [], [], [], [], [], [], []], fa = (k, a) => { for (const v of a) FA[k].push(v) };
+  const spotO = d => { for (let k = 0; k < 4000; k++) { const a = FR() * TAU, r = 640 * sqrt(FR()) * .78, x = cos(a) * r, z = sin(a) * r; if (isR(home, x, z) < .8 && TB.every(b => (x - b[0]) ** 2 + (z - b[2]) ** 2 > d * d)) return [x, z] } return [0, 0] };
+  for (let h = 0; h < 4; h++) { const [x, z] = spotO(280), n = 5 + (FR() * 3 | 0), R = 30 + FR() * 25, sp = 1.6 + FR() * .8, ph = FR() * TAU, sd = FR() * 99; for (let i = 0; i < n; i++)fa(0, [x + (FR() - .5) * 30, 0, z + (FR() - .5) * 30, 8 + FR() * 2.5, ph - i * (.18 + .1 * FR()), sp, 0, R * (.8 + .4 * FR()), 0, 0, 0, 0, sd + i * .013, 0, 0, 0]) }
+  for (let i = 0; i < 4; i++) { const [x, z] = spotO(230); fa(1, [x, 0, z, 6.5 + FR(), FR() * TAU, 3 + FR(), 0, 40 + FR() * 40, 0, 0, 0, 0, FR() * 99, 0, 0, 1]) }
+  for (let g = 0; g < 8; g++) { const [x, z] = spotO(200); for (let i = 0; i < 3; i++)fa(2, [x + (FR() - .5) * 20, 0, z + (FR() - .5) * 20, 3.5 + FR(), FR() * TAU, 2 + FR(), 1, 10 + FR() * 12, 0, 0, 0, 0, FR() * 99, 0, 0, 0]) }
+  for (const [A, B, w, rise, gap] of W.br) for (let i = 0, k = 0; i < 3 && k < 50; k++) { const s0 = .12 + .76 * FR(); if (gap && s0 > gap[0] - .06 && s0 < gap[1] + .06) continue; const a = 6 + FR() * 6, b = 2 + FR() * (w - 6); fa(3, [A[0], A[1], A[2], 3.5, s0, .35 / ((a + b) / 2), 2, b, B[0], B[1], B[2], rise, FR() * 99, FR() * TAU, a, 0]); i++ }
+  for (let ti = 0; ti < 7; ti++) { // two nests per home tree on near-level big limbs, a parent bird that flies loops from each, chicks
+    const C = LB.filter(l => l[0] == ti && abs(l[6]) < .45); for (let k = 0; k < 2 && C.length; k++) {
+      const l = C.splice(FR() * C.length | 0, 1)[0], N = [l[1], l[2] + l[4] / sqrt(1 - l[6] * l[6]) * .85, l[3]], b = TB[ti], o = nrm([N[0] - b[0], 0, N[2] - b[2]]);
+      fa(7, [N[0], N[1], N[2], 5.5, FR() * TAU, 0, 6, 0, 0, 0, 0, 0, FR() * 99, 0, 0, 0]);
+      for (let c = 0; c < 3; c++) { const a = c * 2.1 + FR(), r = .9 + .4 * FR(); fa(8, [N[0] + cos(a) * r, N[1] + .3, N[2] + sin(a) * r, 5, a + PI + (FR() - .5), 0, 7, 0, 0, 0, 0, 0, FR() * 99, 0, 0, 0]) }
+      fa(4, [N[0], N[1], N[2], 2.4, FR(), 30 + FR() * 25, 3, 28 + FR() * 20, o[0], o[2], 14 + FR() * 10, 0, FR() * 99, 0, 0, 0]);
+    }
+  }
+  for (const z of LZ) fa(5, [z[0] + z[3] * .15, z[1] + z[4] * .15, z[2] + z[5] * .15, 4.5, 0, 8 + FR() * 8, 4, 0, z[3], z[4], z[5], 0, FR() * 99, 0, 0, 0]);
+  for (let g = 0, k = 0; g < 10 && k < 500; k++) { // gliders: cling under a big limb, glide to a limb on a neighbouring tree and back
+    const a = LB[FR() * LB.length | 0], C = LB.filter(b => b[0] != a[0] && abs(b[6]) < .5 && abs(b[2] - a[2]) < 90 && (b[1] - a[1]) ** 2 + (b[3] - a[3]) ** 2 > 90 * 90 && (b[1] - a[1]) ** 2 + (b[3] - a[3]) ** 2 < 320 * 320); if (abs(a[6]) > .5 || !C.length) continue;
+    const b = C[FR() * C.length | 0], d = sqrt((b[1] - a[1]) ** 2 + (b[3] - a[3]) ** 2), ub = l => l[2] - l[4] / sqrt(1 - l[6] * l[6]) - .1; // underside of a tilted limb
+    fa(6, [a[1], ub(a), a[3], 3.2, FR(), 26 + FR() * 20, 5, d * .22, b[1], ub(b), b[3], 0, FR() * 99, 0, 0, 0]); g++;
+  }
+  const FK = ['deer', 'fox', 'rabbit', 'snail', 'bird', 'lizard', 'glider', 'nest', 'chick']; let fo = 0;
+  W.fa = { d: new Float32Array(FA.flat()), g: FA.map((a, k) => { const r = [FK[k], fo, a.length / 16]; fo += a.length / 16; return r }) };
+  W.hm = new Float32Array(256 * 256); for (let j = 0; j < 256; j++)for (let i = 0; i < 256; i++) { const x = -850 + i / 255 * 1700, z = -850 + j / 255 * 1700; W.hm[j * 256 + i] = topY(home, x, z, min(isR(home, x, z), 1)) } // home-island ground height for walkers
   W.th = TH;
   // pack
   W.cl = CL.build((b, k) => b[k + 3] * 1.4 + 50); W.pl = PL.build((b, k) => b[k + 3] + 50); W.tu = TU.build((b, k) => b[k + 3] + 50); W.vi = VI.build((b, k) => b[k + 10] > 1.5 ? 1500 : 200);
   W.cr = new Float32Array(CR); W.nb = CR.filter((v, i) => i % 12 == 6 && !v).length; W.nr = CR.filter((v, i) => i % 12 == 6 && v == 1).length; W.pa = new Float32Array(PA);
   W.vb = M.pack(); W.ib = M.i.subarray(0, M.ni); W.items = new Float32Array(M.items);
   W.cap = new Float32Array(W.cap); W.sph = new Float32Array(W.sph);
-  W.cm = clusterMesh(NLEAF, rng); W.fern = fernMesh(rng); W.tuft = tuftMesh(rng); W.bird = birdMesh(); W.ray = rayMesh(); W.bfly = butterflyMesh();
+  W.cm = clusterMesh(NLEAF, rng); W.fern = fernMesh(rng); W.tuft = tuftMesh(rng); W.bird = birdMesh(); W.ray = rayMesh(); W.bfly = butterflyMesh(); W.fm = faunaMeshes();
   // clearance to the nearest solid (dev tool for validating camera paths)
   W.gs = (x, y, z) => {
     let d = 1e9;
