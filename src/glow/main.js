@@ -11,7 +11,7 @@ const main = async (HO, WI) => {
 
   // ---- resources
   const UB = dev.createBuffer({ size: 256, usage: BU.UNIFORM | BU.COPY_DST }), U = new Float32Array(64);
-  const t16 = d => { const t = dev.createTexture({ size: [256, 256], format: 'rgba16float', usage: TB | TU.COPY_DST }); dev.queue.writeTexture({ texture: t }, d, { bytesPerRow: 256 * 8 }, [256, 256]); return t }, lmT = t16(G.lm), cmT = t16(G.cm);
+  const t16 = d => { const t = dev.createTexture({ size: [G.tn, G.tn], format: 'rgba16float', usage: TB | TU.COPY_DST }); dev.queue.writeTexture({ texture: t }, d, { bytesPerRow: G.tn * 8 }, [G.tn, G.tn]); return t }, lmT = t16(G.lm), cmT = t16(G.cm);
   const hmT = dev.createTexture({ size: [GN, GN], format: 'r32float', usage: TB | TU.COPY_DST }); dev.queue.writeTexture({ texture: hmT }, G.hm, { bytesPerRow: GN * 4 }, [GN, GN]);
   const sLin = dev.createSampler({ magFilter: 'linear', minFilter: 'linear' });
   const BGL_M = dev.createBindGroupLayout({ entries: [{ binding: 0, visibility: VSF, buffer: {} }, { binding: 1, visibility: VSF, texture: {} }, { binding: 2, visibility: VSF, sampler: {} }, { binding: 3, visibility: VSF, texture: { sampleType: 'unfilterable-float' } }, { binding: 4, visibility: VSF, texture: {} }] });
@@ -29,7 +29,7 @@ const main = async (HO, WI) => {
   const VMESH = { arrayStride: 40, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' }, { shaderLocation: 2, offset: 24, format: 'float32x4' }] };
   const P = {
     ter: mp(M_TER, 'vs', 'fs', [{ arrayStride: 32, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' }, { shaderLocation: 2, offset: 24, format: 'float32x2' }] }]),
-    inst: [0, 1, 2].map(k => mp(M_INST, 'vs', 'fs', [VMESH, { arrayStride: 64, stepMode: 'instance', attributes: f4(3, 4) }], { c: { KIND: k } })),
+    inst: [0, 1, 2, 3].map(k => mp(M_INST, 'vs', 'fs', [VMESH, { arrayStride: 64, stepMode: 'instance', attributes: f4(3, 4) }], { c: { KIND: k } })),
     fa: mp(M_FA, 'vs', 'fs', [{ arrayStride: 32, attributes: f4(0, 2) }, { arrayStride: 64, stepMode: 'instance', attributes: f4(2, 4) }]),
     water: mp(M_ENV, 'vw', 'fw', [], { strip: 1 }), sky: mp(M_ENV, 'vf', 'fb', [], { ds: DSR }),
     cone: mp(M_ENV, 'vc', 'fc', [{ arrayStride: 48, stepMode: 'instance', attributes: f4(0, 3) }], { blend: ADD, ds: DSR }),
@@ -41,9 +41,18 @@ const main = async (HO, WI) => {
   // ---- geometry: [vertex buffer, index buffer, index count, instance buffer, instances, pipeline]
   const TER = { vb: buf(G.terrain.v, BU.VERTEX), ib: buf(G.terrain.i, BU.INDEX), n: G.terrain.i.length };
   const mesh = m => ({ vb: buf(new Float32Array(m.v), BU.VERTEX), ib: buf(new Uint32Array(m.i), BU.INDEX), n: m.i.length });
-  const DRAW = [];
-  M.giant.forEach((m, k) => { const a = G.inst.giant[k]; if (a.length) DRAW.push([mesh(m), buf(new Float32Array(a), BU.VERTEX), a.length / 16, P.inst[0]]) });
-  for (const [m, a, p] of [[M.cluster, G.inst.cluster, 0], [M.fern, G.inst.fern, 1], [M.rock, G.inst.rock, 2]]) DRAW.push([mesh(m), buf(new Float32Array(a), BU.VERTEX), a.length / 16, P.inst[p]]);
+  // dense layers are sorted into a 16 x 16 grid of cells and only the cells in range and in front of the camera are drawn (md = draw distance; 0 = always)
+  const NC = 16, NCC = NC * NC, CW = EXT * 2 / NC, cellOf = (x, z) => cl((x + EXT) / CW | 0, 0, NC - 1) + NC * cl((z + EXT) / CW | 0, 0, NC - 1), DRAW = [];
+  const layer = (m, a, pipe, md) => {
+    let ia = new Float32Array(a), cs = null; const n = ia.length / 16; if (!n) return;
+    if (md) { const c = new Uint16Array(n), o = new Uint32Array(n), s = new Float32Array(ia.length); cs = new Uint32Array(NCC + 1); for (let i = 0; i < n; i++) { c[i] = cellOf(ia[i * 16], ia[i * 16 + 2]); o[i] = i; cs[c[i] + 1]++ } for (let i = 0; i < NCC; i++)cs[i + 1] += cs[i]; o.sort((p, q) => c[p] - c[q]); for (let i = 0; i < n; i++)s.set(ia.subarray(o[i] * 16, o[i] * 16 + 16), i * 16); ia = s }
+    DRAW.push({ m: mesh(m), b: buf(ia, BU.VERTEX), n, p: pipe, cs, md: md || 0 });
+  };
+  M.giant.forEach((m, k) => layer(m, G.inst.giant[k], P.inst[0], 0));
+  layer(M.cluster, G.inst.cluster, P.inst[0], 240); layer(M.fern, G.inst.fern, P.inst[1], 170); layer(M.rock, G.inst.rock, P.inst[2], 450);
+  layer(M.crystal, G.inst.crystal, P.inst[2], 600); layer(M.lily, G.inst.lily, P.inst[2], 380); layer(M.jelly, G.inst.jelly, P.inst[3], 0);
+  const cvis = new Uint8Array(NCC), cdist = new Float32Array(NCC), ccx = new Float32Array(NCC), ccz = new Float32Array(NCC); for (let i = 0; i < NCC; i++) { ccx[i] = (i % NC + .5) * CW - EXT; ccz[i] = ((i / NC | 0) + .5) * CW - EXT }
+  function cull() { const hl = Math.hypot(S[FX], S[FZ]) || 1; for (let c = 0; c < NCC; c++) { const dx = ccx[c] - S[CX], dz = ccz[c] - S[CZ], d = Math.sqrt(dx * dx + dz * dz); cdist[c] = Math.max(0, d - CW * .71); cvis[c] = d < CW * 1.5 || (dx * S[FX] + dz * S[FZ]) / hl > -CW * .75 - Math.abs(S[FY]) * d ? 1 : 0 } }
   const FAU = ['deer', 'owl', 'frog', 'beast'].map((k, i) => ({ vb: buf(M[k], BU.VERTEX), nv: M[k].length / 8, ib: buf(new Float32Array(G.fa[i]), BU.VERTEX), n: G.fa[i].length / 16 }));
   const CONE = { b: buf(new Float32Array(G.cones), BU.VERTEX), n: G.cones.length / 12 };
   const PTS = G.pa.map((a, k) => ({ b: buf(new Float32Array(a), BU.VERTEX), n: a.length / 8, p: P.pt[k] }));
@@ -81,10 +90,15 @@ const main = async (HO, WI) => {
   // ---- frame
   const SUB = [null];
   function draw() {
-    uniforms(); const e = dev.createCommandEncoder();
+    uniforms(); cull(); const e = dev.createCommandEncoder();
     let p = e.beginRenderPass(PD_MAIN); p.setBindGroup(0, BG_M);
     p.setPipeline(P.ter); p.setVertexBuffer(0, TER.vb); p.setIndexBuffer(TER.ib, 'uint32'); p.drawIndexed(TER.n);
-    for (let k = 0; k < DRAW.length; k++) { const d = DRAW[k]; p.setPipeline(d[3]); p.setVertexBuffer(0, d[0].vb); p.setIndexBuffer(d[0].ib, 'uint32'); p.setVertexBuffer(1, d[1]); p.drawIndexed(d[0].n, d[2]) }
+    for (let k = 0; k < DRAW.length; k++) {
+      const d = DRAW[k], cs = d.cs; p.setPipeline(d.p); p.setVertexBuffer(0, d.m.vb); p.setIndexBuffer(d.m.ib, 'uint32'); p.setVertexBuffer(1, d.b);
+      if (!cs) { p.drawIndexed(d.m.n, d.n); continue }
+      let run = -1, cnt = 0; for (let c = 0; c < NCC; c++) { const n = cs[c + 1] - cs[c]; if (!n) continue; if (cvis[c] && cdist[c] < d.md) { if (run < 0) { run = cs[c]; cnt = 0 } cnt += n } else if (run >= 0) { p.drawIndexed(d.m.n, cnt, 0, 0, run); run = -1 } }
+      if (run >= 0) p.drawIndexed(d.m.n, cnt, 0, 0, run);
+    }
     p.setPipeline(P.fa); for (let k = 0; k < FAU.length; k++) { const f = FAU[k]; if (!f.n) continue; p.setVertexBuffer(0, f.vb); p.setVertexBuffer(1, f.ib); p.draw(f.nv, f.n) }
     p.setPipeline(P.water); p.draw(4); p.setPipeline(P.sky); p.draw(3);
     p.setPipeline(P.cone); p.setVertexBuffer(0, CONE.b); p.draw(144, CONE.n); // soft light cones under the big caps
@@ -102,16 +116,16 @@ const main = async (HO, WI) => {
     if (d && !on()) return;
     switch (e.code) { case 'KeyW': K[0] = d; break; case 'KeyS': K[1] = d; break; case 'KeyA': K[2] = d; break; case 'KeyD': K[3] = d; break; case 'KeyQ': K[4] = d; break; case 'KeyE': K[5] = d; break; case 'ShiftLeft': case 'ShiftRight': K[6] = d; break; case 'KeyF': if (d && !BENCH) { flying = !flying; S[T0] = S[TIME] } }
   };
-  addEventListener('keydown', e => key(e, 1)); addEventListener('keyup', e => key(e, 0));
-  addEventListener('mousemove', e => { if (on() && document.pointerLockElement === cv) { S[YAW] += e.movementX * .0022; S[PIT] = Math.min(Math.max(S[PIT] - e.movementY * .0022, -1.5), 1.5) } });
+  addEventListener('keydown', e => { key(e, 1); if (on()) K[6] = e.shiftKey ? 1 : 0 }); addEventListener('keyup', e => { key(e, 0); K[6] = e.shiftKey ? 1 : 0 }); // boost follows the real Shift state
+  addEventListener('mousemove', e => { if (on() && document.pointerLockElement === cv) { K[6] = e.shiftKey ? 1 : 0; S[YAW] += e.movementX * .0022; S[PIT] = Math.min(Math.max(S[PIT] - e.movementY * .0022, -1.5), 1.5) } });
   function move() {
-    const dt = S[DT], sp = K[6] ? 40 : 10, a = K[0] - K[1], b = K[3] - K[2], c = K[5] - K[4], k = 1 - Math.exp(-dt * 5);
+    const dt = S[DT], sp = K[6] ? 75 : 14, a = K[0] - K[1], b = K[3] - K[2], c = K[5] - K[4], k = 1 - Math.exp(-dt * 5);
     S[VX] += ((S[FX] * a + S[RX] * b) * sp - S[VX]) * k; S[VY] += ((S[FY] * a + c) * sp - S[VY]) * k; S[VZ] += ((S[FZ] * a + S[RZ] * b) * sp - S[VZ]) * k;
     S[CX] += S[VX] * dt; S[CY] += S[VY] * dt; S[CZ] += S[VZ] * dt;
-    const r = Math.hypot(S[CX], S[CZ]); if (r > 620) { S[CX] *= 620 / r; S[CZ] *= 620 / r }
-    const gy = G.H(S[CX], S[CZ]) + 1.2; if (S[CY] < gy) { S[CY] = gy; if (S[VY] < 0) S[VY] = 0 } if (S[CY] < .8) S[CY] = .8; if (S[CY] > 180) S[CY] = 180;
+    const r = Math.hypot(S[CX], S[CZ]); if (r > 960) { S[CX] *= 960 / r; S[CZ] *= 960 / r }
+    const gy = G.H(S[CX], S[CZ]) + 1.2; if (S[CY] < gy) { S[CY] = gy; if (S[VY] < 0) S[VY] = 0 } if (S[CY] < .8) S[CY] = .8; if (S[CY] > 300) S[CY] = 300;
   }
-  const TW = [], NTW = 14, FLT = 110; for (let i = 0; i < NTW; i++) { const a = i / NTW * 6.2832 + .4, r = 250 + 90 * Math.sin(a * 2 + 1), x = Math.cos(a) * r - 40, z = Math.sin(a) * r + 30; TW.push(x, Math.max(G.H(x, z), 0) + 12 + 8 * Math.sin(a * 3), z) }
+  const TW = [], NTW = 18, FLT = 150; for (let i = 0; i < NTW; i++) { const a = i / NTW * 6.2832 + .4, r = 420 + 230 * Math.sin(a * 2 + 1), x = Math.cos(a) * r - 40, z = Math.sin(a) * r + 30; TW.push(x, Math.max(G.H(x, z), 0) + 16 + 10 * Math.sin(a * 3), z) }
   const FA_ = new Float64Array(3), FB_ = new Float64Array(3);
   function tourAt(o) { const u = (S[FT] / FLT % 1 + 1) % 1 * NTW, i = u | 0, f = u - i, a = (i + NTW - 1) % NTW * 3, b = i * 3, c = (i + 1) % NTW * 3, d = (i + 2) % NTW * 3; for (let k = 0; k < 3; k++) { const A = TW[a + k], B = TW[b + k], C = TW[c + k], D = TW[d + k]; o[k] = .5 * (2 * B + (C - A) * f + (2 * A - 5 * B + 4 * C - D) * f * f + (3 * B - A - 3 * C + D) * f * f * f) } }
   function tour() { tourAt(FA_); S[FT] += .8; tourAt(FB_); S[FT] -= .8; S[CX] = FA_[0]; S[CY] = FA_[1]; S[CZ] = FA_[2]; const dx = FB_[0] - FA_[0], dy = FB_[1] - FA_[1], dz = FB_[2] - FA_[2]; S[YAW] = Math.atan2(dx, -dz); S[PIT] = Math.atan2(dy, Math.hypot(dx, dz)) - .08 }
@@ -149,15 +163,15 @@ const main = async (HO, WI) => {
       else if (ty == 23) { // deer: the herd's lead animal, with the same flee maths as the shader
         const F = FD[0], sd = F[o + 12], om = .11 + .05 * (sd * .618 % 1), sp = F[o + 5], u = sp * t + .95 * sp / om * Math.sin(t * om + sd * 6), R = F[o + 7], an = u / R + F[o + 4];
         let x = F[o] + R * Math.cos(an) * (1 + .3 * Math.sin(2 * an + sd)), z = F[o + 2] + R * Math.sin(an) * (1 + .3 * Math.cos(3 * an + sd)); const dx = x - cx, dz = z - cz, dl = Math.max(Math.hypot(dx, dz), 1e-3);
-        const st = (1 - ss(8, 32, dl)) * (1 - ss(10, 22, cy - G.H(x, z))); x += dx / dl * st * 14; z += dz / dl * st * 14; EP[e * 3] = x; EP[e * 3 + 1] = G.H(x, z) + 1; EP[e * 3 + 2] = z; EA[e] = st;
+        const st = (1 - ss(5, 18, dl)) * (1 - ss(8, 18, cy - G.H(x, z))); x += dx / dl * st * 10; z += dz / dl * st * 10; EP[e * 3] = x; EP[e * 3 + 1] = G.H(x, z) + 1; EP[e * 3 + 2] = z; EA[e] = st;
       }
     }
   }
   S[LAST] = performance.now(); S[TOFF] = -S[LAST] / 1000;
   return {
-    name: 'Glowcap Hollow', help: HELP, audio: { n: NE, T: ET, P: EP, A: EA, tick: atick, ref: 4 }, tanY: FOVT, bench: BENCH, speed: 10, tick: frame,
+    name: 'Glowcap Hollow', help: HELP, audio: { n: NE, T: ET, P: EP, A: EA, tick: atick, ref: 4 }, tanY: FOVT, bench: BENCH, speed: 14, tick: frame,
     place(x, y, z, yaw, v, pit = 0) { S[CX] = x; S[CY] = y; S[CZ] = z; S[YAW] = yaw; S[PIT] = pit; flying = false; const c = Math.cos(pit); S[VX] = Math.sin(yaw) * c * v; S[VY] = Math.sin(pit) * v; S[VZ] = -Math.cos(yaw) * c * v },
-    hold(codes) { for (const c of codes) if (/^Key[WASDQE]$|^Shift/.test(c)) key({ code: c }, 1) },
+    hold(codes) { for (const c of codes) if (/^Key[WASDQE]$|^Shift/.test(c)) key({ code: c }, 1); K[6] = codes.has('ShiftLeft') || codes.has('ShiftRight') ? 1 : 0 },
     enter() { resize(); S[LAST] = performance.now() }, leave() { K.fill(0) },
     snap() { HO.snapView = HO.peek(HO.snapFor, W, H); S[TIME] = performance.now() / 1000 + S[TOFF]; draw(); HO.snapView = null }
   };

@@ -55,6 +55,22 @@ function glowMeshes() {
     let F = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
     for (let s = 0; s < 2; s++) { const C = {}, F2 = [], mid = (a, b) => { const k = a < b ? a + '_' + b : b + '_' + a; if (C[k] === undefined) { C[k] = V.length; V.push(nz([V[a][0] + V[b][0], V[a][1] + V[b][1], V[a][2] + V[b][2]])) } return C[k] }; for (const f of F) { const a = mid(f[0], f[1]), b = mid(f[1], f[2]), c = mid(f[2], f[0]); F2.push([f[0], a, c], [f[1], b, a], [f[2], c, b], [a, b, c]) } F = F2 }
     for (const p of V) { const d = .75 + .35 * fbm(p[0] * 2 + 5, p[2] * 2 + p[1] * 3, 3); m.vx([p[0] * d, Math.max(p[1] * d * .7, -.25), p[2] * d], 0, 0, 0, 4) } for (const f of F) m.i.push(f[0], f[1], f[2]); M.rock = m.nrm() }
+  { const m = new GM(); // lantern jelly: bell (m6: uv.x angle, uv.y crown -> rim), glowing core, trailing tendrils (m5)
+    m.lathe([0, 0, 0], [[0, .42], [.2, .4], [.36, .33], [.47, .2], [.52, .06], [.5, -.02], [.4, 0], [.2, .06]], 20, (a, j) => 1 + (j > 3 ? .05 * Math.cos(a * 8) : 0), (a, j) => [a, Math.min(j / 5, 1), 0, 6]);
+    m.lathe([0, .12, 0], [[0, .12], [.1, .08], [.13, 0], [.1, -.08], [0, -.12]], 10, () => 1, a => [a, 0, 1, 6]);
+    for (let k = 0; k < 9; k++) { const a = k / 9 * 6.2832, L = .9 + .9 * r(), rr = .3 + .12 * r(), b = m.v.length / 10, ca = Math.cos(a), sa = Math.sin(a), w = .012;
+      for (let j = 0; j <= 7; j++) { const t = j / 7, o = rr * (1 - .3 * t); for (const e of [-1, 1]) m.vx([ca * o - sa * w * e, -L * t, sa * o + ca * w * e], a, t, 0, 5); if (j) { const v = b + j * 2; m.quad(v - 2, v - 1, v + 1, v) } } }
+    M.jelly = m.nrm() }
+  { const m = new GM(), c = m.vx([0, .01, 0], 0, 0, 0, 7), N = 20, rim = []; // lily pad (m7, uv.y = radius) with a notch; the bloom (m8, uv.y base -> tip) only shows when the instance asks for it
+    for (let k = 0; k <= N; k++) { const a = .25 + k / N * (6.2832 - .5); rim.push(m.vx([Math.cos(a) * (1 + .05 * Math.sin(a * 5)), .02 + .025 * Math.sin(a * 3), Math.sin(a) * (1 + .05 * Math.sin(a * 5))], a, 1, 0, 7)) } for (let k = 0; k < N; k++) m.i.push(c, rim[k + 1], rim[k]);
+    for (let ring = 0; ring < 2; ring++)for (let k = 0; k < 7; k++) { const a = k / 7 * 6.2832 + ring * .45, L = ring ? .3 : .42, up = ring ? .34 : .2, ca = Math.cos(a), sa = Math.sin(a), b = m.v.length / 10;
+      m.vx([ca * .05, .04, sa * .05], -1, 0, 0, 8); m.vx([ca * L * .5 - sa * .09, .04 + up * .55, sa * L * .5 + ca * .09], -1, .5, 0, 8); m.vx([ca * L * .5 + sa * .09, .04 + up * .55, sa * L * .5 - ca * .09], 1, .5, 0, 8); m.vx([ca * L, .04 + up, sa * L], 0, 1, 0, 8); m.i.push(b, b + 1, b + 2, b + 1, b + 3, b + 2) }
+    M.lily = m.nrm() }
+  { const m = new GM(); // crystal cluster: tilted hexagonal shards (m9, uv.y base -> tip)
+    for (let k = 0; k < 6; k++) { const a = k * 2.1 + r(), tl = k ? .25 + .4 * r() : .05, L = k ? .45 + .5 * r() : 1, w = (k ? .07 + .06 * r() : .13), ax = nz([Math.cos(a) * tl, 1, Math.sin(a) * tl]), b0 = [Math.cos(a) * .12 * (k ? 1 : 0), -.05, Math.sin(a) * .12 * (k ? 1 : 0)], N1 = nz(crs(ax, [1, 0, .3])), N2 = crs(ax, N1), b = m.v.length / 10;
+      for (const [t, rr] of [[0, 1], [.78, .85], [1, 0]]) for (let q = 0; q <= 6; q++) { const an = q / 6 * 6.2832, c = Math.cos(an) * w * rr, d = Math.sin(an) * w * rr; m.vx([b0[0] + ax[0] * L * t + N1[0] * c + N2[0] * d, b0[1] + ax[1] * L * t + N1[1] * c + N2[1] * d, b0[2] + ax[2] * L * t + N1[2] * c + N2[2] * d], q / 6, t, 0, 9) }
+      for (let j = 0; j < 2; j++)for (let q = 0; q < 6; q++) { const v = b + j * 7 + q; m.quad(v, v + 7, v + 8, v + 1) } }
+    M.crystal = m.nrm() }
   // fauna: triangle lists, 8 floats/vertex = pos, w (0 body, 1-4 legs + depth, 5 head + along, 6 tail), colour key c, normal
   const FV = () => { const o = { v: [] }; o.pt = (p, n, W) => o.v.push(p[0], p[1], p[2], W[0], W[1], n[0], n[1], n[2]);
     o.blob = (C, rr, wc, nu = 10, nv = 7) => { const P = (i, j) => { const th = i / nu * 6.2832, ph = j / nv * Math.PI, d = [Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th)]; return [[C[0] + d[0] * rr[0], C[1] + d[1] * rr[1], C[2] + d[2] * rr[2]], nz([d[0] / rr[0], d[1] / rr[1], d[2] / rr[2]])] }; for (let j = 0; j < nv; j++)for (let i = 0; i < nu; i++) { const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1); for (const q of [a, c, b, a, d, c]) o.pt(q[0], q[1], typeof wc == 'function' ? wc(q[0]) : wc) } };

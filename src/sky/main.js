@@ -227,9 +227,9 @@ const main = async (H, ID) => {
   }
   const FT = BENCH ? new Float32Array(40000) : null; let nf = 0;
   if (BENCH) { IM[0] = 1; S[15] = -3; hud.textContent = 'Benchmark: 60 s scripted fly-through…' }
-  addEventListener('mousemove', e => { if (on() && document.pointerLockElement) { S[13] += e.movementX; S[14] += e.movementY } });
-  addEventListener('keydown', e => { if (!on()) return; K[e.keyCode & 255] = 1; if (e.keyCode == 70 && !BENCH) { IM[0] ^= 1; S[6] = S[7] = S[8] = 0 } });
-  addEventListener('keyup', e => { K[e.keyCode & 255] = 0 });
+  addEventListener('mousemove', e => { if (on() && document.pointerLockElement) { K[16] = e.shiftKey ? 1 : 0; S[13] += e.movementX; S[14] += e.movementY } });
+  addEventListener('keydown', e => { if (!on()) return; K[e.keyCode & 255] = 1; K[16] = e.shiftKey ? 1 : 0; if (e.keyCode == 70 && !BENCH) { IM[0] ^= 1; S[6] = S[7] = S[8] = 0 } });
+  addEventListener('keyup', e => { K[e.keyCode & 255] = 0; K[16] = e.shiftKey ? 1 : 0 });
   const stat = a => { const s = Float32Array.from(a).sort(), n = s.length; let m = 0, o = 0; for (const v of s) { m += v; if (v > 16.7) o++ } return n ? { n, avg: +(m / n).toFixed(2), p50: +s[n >> 1].toFixed(2), p99: +s[min(n - 1, floor(n * .99))].toFixed(2), max: +s[n - 1].toFixed(2), over16_7: o } : null };
   function step() { // all per-frame double math lives here (JIT-warmed below) so the rAF callback itself never boxes a number
     const ms = S[62] - S[61]; S[61] = S[62]; S[12] = ms > 100 ? .1 : ms > 0 ? ms / 1000 : 0;

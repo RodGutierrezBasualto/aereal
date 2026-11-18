@@ -418,8 +418,8 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
       default: if (d && e.code.startsWith('Digit')) { const n = +e.code[5] - 1; if (n >= 0 && n < POSES.length / 6) { flying = false; pose(n); } }
     }
   };
-  addEventListener('keydown', e => key(e, 1)); addEventListener('keyup', e => key(e, 0));
-  addEventListener('mousemove', e => { if (on() && document.pointerLockElement === cv) { S[YAW] += e.movementX * .0022; S[PIT] = Math.min(Math.max(S[PIT] - e.movementY * .0022, -1.5), 1.5); } });
+  addEventListener('keydown', e => { key(e, 1); if (on()) K[6] = e.shiftKey ? 1 : 0; }); addEventListener('keyup', e => { key(e, 0); K[6] = e.shiftKey ? 1 : 0; }); // boost follows the real Shift state
+  addEventListener('mousemove', e => { if (on() && document.pointerLockElement === cv) { K[6] = e.shiftKey ? 1 : 0; S[YAW] += e.movementX * .0022; S[PIT] = Math.min(Math.max(S[PIT] - e.movementY * .0022, -1.5), 1.5); } });
   const HELP = 'Click to dive  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F fly-through  ·  1–6 viewpoints  ·  P next world\nSwim into the golden ring to rise into the sky';
   function blocked() { // is the point S[QX..QZ] inside (or within ~1 m of) rock? trilinear sample of the density grid, no doubles cross a call boundary
     const x = Math.min(Math.max((S[QX] - OX) / CS, 0), NX - 1.001), y = Math.min(Math.max((S[QY] - OY) / CS, 0), NY - 1.001), z = Math.min(Math.max((S[QZ] - OZ) / CS, 0), NZ - 1.001);
