@@ -77,7 +77,7 @@ const main = async (H, ID) => {
     for (let i = 0; i < NBL; i++) { const p = i ? P.bd : P.bd0; PD.bl.push({ colorAttachments: [{ view: bv[i], loadOp: 'clear', storeOp: 'store' }] }); BGb.push(bg(p.getBindGroupLayout(0), [[0, i ? bv[i - 1] : hd], [1, SL]])) }
     for (let i = NBL - 2; i >= 0; i--) { PD.bl.push({ colorAttachments: [{ view: bv[i], loadOp: 'load', storeOp: 'store' }] }); BGb.push(bg(P.bu.getBindGroupLayout(0), [[0, bv[i + 1]], [1, SL]])) }
   }
-  const fit = () => { WD = +Q.get('w') || max(1, round(cv.clientWidth * devicePixelRatio)); HT = +Q.get('h') || max(1, round(cv.clientHeight * devicePixelRatio)); if (on()) { cv.width = WD; cv.height = HT } resize() };
+  const fit = () => { const w = +Q.get('w') || max(1, round(cv.clientWidth * devicePixelRatio)), h = +Q.get('h') || max(1, round(cv.clientHeight * devicePixelRatio)), same = w === WD && h === HT && T.mc; WD = w; HT = h; if (on() && (cv.width !== WD || cv.height !== HT)) { cv.width = WD; cv.height = HT } if (!same) resize() }; // targets are only rebuilt when the size really changed
   fit(); if (!Q.get('w')) addEventListener('resize', () => { if (on()) fit() });
 
   // ---------- per-frame state: everything numeric lives in typed arrays (no allocation while running)
@@ -219,7 +219,7 @@ const main = async (H, ID) => {
   }
 
   // ---------- modes
-  const HELP = 'Click to fly  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F guided tour\nFly into the glowing ring (or press P) to dive into the sea';
+  const HELP = 'Click to fly  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F guided tour  ·  P next world\nFly into a ring to travel: teal to the sea, violet to Glowcap Hollow';
   if (CAP) {
     const st = () => [S[0], S[1], S[2], S[3], S[4], S[5]].map(v => +v.toFixed(2));
     window.__cap = { set(x, y, z, yaw, pit, t) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = pit; S[5] = t; frame(); return st() }, pose(i) { S.set(POSES.subarray(i * 6, i * 6 + 6)); frame(); return st() }, fly(t) { S[15] = S[5] = t; flyCam(); frame(); return st() }, png: () => cv.toDataURL(), async gpu(mask) { IM[4] = mask; let a = 0; for (let i = 0; i < 6; i++) { frame(); await q.onSubmittedWorkDone(); await new Promise(r => setTimeout(r, 30)); if (i > 1) a += S[63] } IM[4] = 0; return +(a / 4).toFixed(1) }, jpg: j => cv.toDataURL('image/jpeg', j), gs: W.gs, W, S };
@@ -242,7 +242,7 @@ const main = async (H, ID) => {
   }
   if (!BENCH) { for (let i = 0; i < 4000; i++) { S[62] = i * 16.7; IM[0] = i & 1; step(); uniforms(); for (let k = 0; k < nCl; k += 97) { inFr(clF, k * 4); inCs(clF, k * 4, i % 3); leafCount(k * 4, 1); near(clF, k * 4, 500) } } S.fill(0, 5, 9); S.fill(0, 12, 16); S.set(POSES.subarray(0, 5)); IM[0] = Q.has('fly') && H.first === ID ? 1 : 0 } // JIT warm-up
   S[61] = S[62] = performance.now();
-  // ---------- audio emitters (types in audio.js: 0 flock, 1 nest, 2 deer herd, 3 fox, 4 rabbits, 5 glider, 6 lizard, 7 canopy, 8 thermal); positions mirror the shaders
+  // ---------- audio emitters (types in audio.js: 0 flock, 1 nest, 2 deer herd, 3 fox, 4 rabbits, 5 glider, 6 lizard); positions mirror the shaders
   const AE = [], FG2 = {}, FD = W.fa.d; W.fa.g.forEach(([k, f, n]) => FG2[k] = [f, n]);
   { const c = W.cr; for (let i = 0; i < c.length / 12; i++) if (!c[i * 12 + 6] && (!i || c[i * 12] != c[i * 12 - 12] || c[i * 12 + 2] != c[i * 12 - 10])) AE.push(0, i) }
   for (let i = 0; i < FG2.nest[1]; i++) AE.push(1, i);
@@ -251,8 +251,6 @@ const main = async (H, ID) => {
   for (let i = 0; i < FG2.rabbit[1]; i += 3) AE.push(4, FG2.rabbit[0] + i);
   for (let i = 0; i < FG2.glider[1]; i++) AE.push(5, FG2.glider[0] + i);
   for (let i = 0; i < FG2.lizard[1]; i++) AE.push(6, FG2.lizard[0] + i);
-  for (let i = 0; i < W.pa.length; i += 8) if (W.pa[i + 5] == 2 && W.pa[i] != W.pa[i - 8]) AE.push(7, i);
-  for (let i = 0; i < W.th.length; i++) AE.push(8, i);
   const NE = AE.length / 2, ET = new Uint8Array(NE), EI = new Int32Array(NE), EP = new Float64Array(NE * 3), EA = new Float32Array(NE);
   for (let e = 0; e < NE; e++) { ET[e] = AE[e * 2]; EI[e] = AE[e * 2 + 1] }
   const sst = (a, b, x) => { x = clamp((x - a) / (b - a), 0, 1); return x * x * (3 - 2 * x) };
@@ -269,9 +267,7 @@ const main = async (H, ID) => {
         x += dx / dl * a * fr * .4; z += dz / dl * a * fr * .4; const rl = sqrt(x * x + z * z); if (rl > 470) { x *= 470 / rl; z *= 470 / rl } y = ghJ(x, z) + 3;
       }
       else if (ty == 5) { const b = o * 16, pr = ((t / FD[b + 5] + FD[b + 4]) % 1 + 1) % 1; let s = 0; if (pr >= .42 && pr < .5) { s = (pr - .42) / .08; a = 1 } else if (pr >= .5 && pr < .92) s = 1; else if (pr >= .92) { s = 1 - (pr - .92) / .08; a = 1 } x = FD[b] + (FD[b + 8] - FD[b]) * s; y = FD[b + 1] + (FD[b + 9] - FD[b + 1]) * s - FD[b + 7] * sin(PI * s); z = FD[b + 2] + (FD[b + 10] - FD[b + 2]) * s }
-      else if (ty == 6) { const b = o * 16; x = FD[b]; y = FD[b + 1]; z = FD[b + 2]; a = ((t / FD[b + 5] + FD[b + 12]) % 1) * FD[b + 5] < .7 ? 1 : 0 }
-      else if (ty == 7) { x = W.pa[o]; y = W.pa[o + 1]; z = W.pa[o + 2] }
-      else { const T = W.th[o]; x = T[0]; z = T[1]; y = clamp(cy, -620, 880) }
+      else { const b = o * 16; x = FD[b]; y = FD[b + 1]; z = FD[b + 2]; a = ((t / FD[b + 5] + FD[b + 12]) % 1) * FD[b + 5] < .7 ? 1 : 0 }
       EP[e * 3] = x; EP[e * 3 + 1] = y; EP[e * 3 + 2] = z; EA[e] = a;
     }
   }
@@ -280,7 +276,7 @@ const main = async (H, ID) => {
     name: 'Aereal', help: HELP, tanY: S[10], bench: BENCH,
     tick() { S[62] = H.T[0]; step(); frame() }, // host loop writes rAF time into H.T[0]
     place(x, y, z, yaw, v, pit = 0) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = pit; IM[0] = 0; camBasis(); S[6] = S[16] * v; S[7] = S[17] * v; S[8] = S[18] * v },
-    speed: 50, enter() { if (!Q.get('w')) fit(); else { cv.width = WD; cv.height = HT } S[61] = performance.now() }, leave() { K.fill(0) },
-    snap() { H.snapView = H.peek(ID, WD, HT); frame(); H.snapView = null }
+    speed: 50, hold(codes) { for (const c of codes) { const k = c.startsWith('Key') ? c.charCodeAt(3) : c.startsWith('Shift') ? 16 : 0; if (k && k != 70 && k != 80) K[k] = 1 } }, enter() { if (!Q.get('w')) fit(); else { cv.width = WD; cv.height = HT } S[61] = performance.now() }, leave() { K.fill(0) },
+    snap() { H.snapView = H.peek(H.snapFor, WD, HT); frame(); H.snapView = null }
   };
 };

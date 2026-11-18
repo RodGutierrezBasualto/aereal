@@ -420,7 +420,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   };
   addEventListener('keydown', e => key(e, 1)); addEventListener('keyup', e => key(e, 0));
   addEventListener('mousemove', e => { if (on() && document.pointerLockElement === cv) { S[YAW] += e.movementX * .0022; S[PIT] = Math.min(Math.max(S[PIT] - e.movementY * .0022, -1.5), 1.5); } });
-  const HELP = 'Click to dive  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F fly-through  ·  1–6 viewpoints\nSwim into the golden ring (or press P) to rise into the sky';
+  const HELP = 'Click to dive  ·  WASD move  ·  mouse look  ·  Q / E down / up  ·  Shift boost  ·  F fly-through  ·  1–6 viewpoints  ·  P next world\nSwim into the golden ring to rise into the sky';
   function blocked() { // is the point S[QX..QZ] inside (or within ~1 m of) rock? trilinear sample of the density grid, no doubles cross a call boundary
     const x = Math.min(Math.max((S[QX] - OX) / CS, 0), NX - 1.001), y = Math.min(Math.max((S[QY] - OY) / CS, 0), NY - 1.001), z = Math.min(Math.max((S[QZ] - OZ) / CS, 0), NZ - 1.001);
     const ix = x | 0, iy = y | 0, iz = z | 0, tx = x - ix, ty = y - iy, tz = z - iz, D = TG.D, c = ix + iy * NX + iz * NX * NY, s = NX * NY;
@@ -476,7 +476,8 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   return {
     name: 'Kelp Sanctum', help: HELP, audio: { n: NE, T: ET, P: EP, A: EA, tick: atick, ref: 3.5 }, tanY: FOVT, bench: BENCH, speed: 9, tick: frame,
     place(x, y, z, yaw, v, pit = 0) { S[CX] = x; S[CY] = y; S[CZ] = z; S[YAW] = yaw; S[PIT] = pit; flying = false; S[VX] = Math.sin(yaw) * v; S[VY] = 0; S[VZ] = -Math.cos(yaw) * v; },
+    hold(codes) { for (const c of codes) if (/^Key[WASDQE]$|^Shift/.test(c)) key({ code: c }, 1); },
     enter() { resize(); S[LAST] = performance.now(); }, leave() { K.fill(0); },
-    snap() { HO.snapView = HO.peek(WI, W, H); S[TIME] = performance.now() / 1000 + S[TOFF]; draw(); HO.snapView = null; }
+    snap() { HO.snapView = HO.peek(HO.snapFor, W, H); S[TIME] = performance.now() / 1000 + S[TOFF]; draw(); HO.snapView = null; }
   };
 };
