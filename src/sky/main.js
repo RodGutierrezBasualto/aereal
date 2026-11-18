@@ -166,7 +166,7 @@ const main = async (H, ID) => {
     UB[64] = px; UB[65] = py; UB[66] = pz; UB[67] = S[5]; UB[68] = LB[6]; UB[69] = LB[7]; UB[70] = LB[8]; UB[72] = WD; UB[73] = HT; UB[74] = 1 / WD; UB[75] = 1 / HT;
     UB[80] = S[19] * tx; UB[81] = S[20] * tx; UB[82] = S[21] * tx; UB[84] = S[22] * ty; UB[85] = S[23] * ty; UB[86] = S[24] * ty; UB[88] = Fx; UB[89] = Fy; UB[90] = Fz; UB[92] = NEAR; UB[93] = FOGK; UB[94] = 2 * ty / HT;
     for (let i = 0; i < 16; i++) PU[i] = UB[i];
-    PU[16] = px; PU[17] = py; PU[18] = pz; PU[19] = S[5]; PU[63] = IM[0];
+    PU[16] = px; PU[17] = py; PU[18] = pz; PU[19] = S[5]; PU[63] = IM[0]; PU[56] = Fx; PU[57] = Fy; PU[58] = Fz;
   }
   function inFr(A, o) { const x = A[o], y = A[o + 1], z = A[o + 2], r = A[o + 3]; for (let i = 25; i < 45; i += 4)if (S[i] * x + S[i + 1] * y + S[i + 2] * z + S[i + 3] < -r) return false; return true }
   function inCs(A, o, c) { const x = A[o], y = A[o + 1], z = A[o + 2], k = 45 + c * 3, R = S[k + 2] + A[o + 3]; return abs(x * LB[0] + y * LB[1] + z * LB[2] - S[k]) < R && abs(x * LB[3] + y * LB[4] + z * LB[5] - S[k + 1]) < R }
@@ -242,7 +242,41 @@ const main = async (H, ID) => {
   }
   if (!BENCH) { for (let i = 0; i < 4000; i++) { S[62] = i * 16.7; IM[0] = i & 1; step(); uniforms(); for (let k = 0; k < nCl; k += 97) { inFr(clF, k * 4); inCs(clF, k * 4, i % 3); leafCount(k * 4, 1); near(clF, k * 4, 500) } } S.fill(0, 5, 9); S.fill(0, 12, 16); S.set(POSES.subarray(0, 5)); IM[0] = Q.has('fly') && H.first === ID ? 1 : 0 } // JIT warm-up
   S[61] = S[62] = performance.now();
+  // ---------- audio emitters (types in audio.js: 0 flock, 1 nest, 2 deer herd, 3 fox, 4 rabbits, 5 glider, 6 lizard, 7 canopy, 8 thermal); positions mirror the shaders
+  const AE = [], FG2 = {}, FD = W.fa.d; W.fa.g.forEach(([k, f, n]) => FG2[k] = [f, n]);
+  { const c = W.cr; for (let i = 0; i < c.length / 12; i++) if (!c[i * 12 + 6] && (!i || c[i * 12] != c[i * 12 - 12] || c[i * 12 + 2] != c[i * 12 - 10])) AE.push(0, i) }
+  for (let i = 0; i < FG2.nest[1]; i++) AE.push(1, i);
+  { const [f, n] = FG2.deer; for (let i = 0; i < n; i++) if (!i || abs(FD[(f + i) * 16 + 12] - FD[(f + i - 1) * 16 + 12]) > .02) AE.push(2, f + i) }
+  for (let i = 0; i < FG2.fox[1]; i++) AE.push(3, FG2.fox[0] + i);
+  for (let i = 0; i < FG2.rabbit[1]; i += 3) AE.push(4, FG2.rabbit[0] + i);
+  for (let i = 0; i < FG2.glider[1]; i++) AE.push(5, FG2.glider[0] + i);
+  for (let i = 0; i < FG2.lizard[1]; i++) AE.push(6, FG2.lizard[0] + i);
+  for (let i = 0; i < W.pa.length; i += 8) if (W.pa[i + 5] == 2 && W.pa[i] != W.pa[i - 8]) AE.push(7, i);
+  for (let i = 0; i < W.th.length; i++) AE.push(8, i);
+  const NE = AE.length / 2, ET = new Uint8Array(NE), EI = new Int32Array(NE), EP = new Float64Array(NE * 3), EA = new Float32Array(NE);
+  for (let e = 0; e < NE; e++) { ET[e] = AE[e * 2]; EI[e] = AE[e * 2 + 1] }
+  const sst = (a, b, x) => { x = clamp((x - a) / (b - a), 0, 1); return x * x * (3 - 2 * x) };
+  const ghJ = (x, z) => { const M = W.hm, u = clamp((x + 850) * 255 / 1700, 0, 254.99), v = clamp((z + 850) * 255 / 1700, 0, 254.99), i = u | 0, j = v | 0, fx = u - i, fz = v - j, o = j * 256 + i; return (M[o] + (M[o + 1] - M[o]) * fx) * (1 - fz) + (M[o + 256] + (M[o + 257] - M[o + 256]) * fx) * fz };
+  function atick(t, cx, cy, cz) {
+    for (let e = 0; e < NE; e++) {
+      const ty = ET[e], o = EI[e]; let x = 0, y = 0, z = 0, a = 0;
+      if (ty == 0) { const c = W.cr, b = o * 12, R = c[b + 3], an = t * c[b + 5] / R + c[b + 4], ph = c[b] * .013 + c[b + 2] * .007; x = c[b] + cos(an) * R * (1 + .25 * sin(an * 2 + ph)); y = c[b + 1] + sin(an * 1.3 + ph) * c[b + 11]; z = c[b + 2] + sin(an) * R * (1 + .25 * cos(an * 3 + ph)); a = 1 - sst(c[b + 7] * 3, c[b + 7] * 14, sqrt((x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2)) }
+      else if (ty == 1) { const b = (FG2.nest[0] + o) * 16, q = (FG2.bird[0] + o) * 16; x = FD[b]; y = FD[b + 1]; z = FD[b + 2]; a = ((t / FD[q + 5] + FD[q + 4]) % 1 + 1) % 1 > .3 ? 1 : 0 }
+      else if (ty <= 4) {
+        const b = o * 16, sd = FD[b + 12], om = .11 + .05 * (sd * .618 % 1), sp = FD[b + 5], u = sp * t + .95 * sp / om * sin(t * om + sd * 6), R = FD[b + 7], an = u / R + FD[b + 4], fr = ty == 4 ? 90 : 170;
+        x = FD[b] + R * cos(an) * (1 + .3 * sin(2 * an + sd)); z = FD[b + 2] + R * sin(an) * (1 + .3 * cos(3 * an + sd));
+        const dx = x - cx, dz = z - cz, dl = max(sqrt(dx * dx + dz * dz), 1e-3); a = (1 - sst(fr * .25, fr, dl)) * (1 - sst(fr * .5, fr * .9, cy - ghJ(x, z)));
+        x += dx / dl * a * fr * .4; z += dz / dl * a * fr * .4; const rl = sqrt(x * x + z * z); if (rl > 470) { x *= 470 / rl; z *= 470 / rl } y = ghJ(x, z) + 3;
+      }
+      else if (ty == 5) { const b = o * 16, pr = ((t / FD[b + 5] + FD[b + 4]) % 1 + 1) % 1; let s = 0; if (pr >= .42 && pr < .5) { s = (pr - .42) / .08; a = 1 } else if (pr >= .5 && pr < .92) s = 1; else if (pr >= .92) { s = 1 - (pr - .92) / .08; a = 1 } x = FD[b] + (FD[b + 8] - FD[b]) * s; y = FD[b + 1] + (FD[b + 9] - FD[b + 1]) * s - FD[b + 7] * sin(PI * s); z = FD[b + 2] + (FD[b + 10] - FD[b + 2]) * s }
+      else if (ty == 6) { const b = o * 16; x = FD[b]; y = FD[b + 1]; z = FD[b + 2]; a = ((t / FD[b + 5] + FD[b + 12]) % 1) * FD[b + 5] < .7 ? 1 : 0 }
+      else if (ty == 7) { x = W.pa[o]; y = W.pa[o + 1]; z = W.pa[o + 2] }
+      else { const T = W.th[o]; x = T[0]; z = T[1]; y = clamp(cy, -620, 880) }
+      EP[e * 3] = x; EP[e * 3 + 1] = y; EP[e * 3 + 2] = z; EA[e] = a;
+    }
+  }
   return {
+    audio: { n: NE, T: ET, P: EP, A: EA, tick: atick, ref: 45 },
     name: 'Aereal', help: HELP, tanY: S[10], bench: BENCH,
     tick() { S[62] = H.T[0]; step(); frame() }, // host loop writes rAF time into H.T[0]
     place(x, y, z, yaw, v, pit = 0) { S[0] = x; S[1] = y; S[2] = z; S[3] = yaw; S[4] = pit; IM[0] = 0; camBasis(); S[6] = S[16] * v; S[7] = S[17] * v; S[8] = S[18] * v },

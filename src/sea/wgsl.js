@@ -363,7 +363,7 @@ fn tpn(p:vec3f,n:vec3f,w:vec3f,s:f32)->NH{
  }else if(mt==13u){ // whale shark: dark back with white spots and bars, pale belly
   let top=smoothstep(-.03,.03,i.rp.y);let sp=1.-smoothstep(.12,.22,length(fract(i.rp.zx*vec2f(26.,30.))-.5));
   let bar=1.-smoothstep(.03,.08,abs(fract(i.rp.z*9.)-.5));
-  m.a=mix(vec3f(.78,.8,.8),mix(vec3f(.1,.16,.24)*(.8+.4*cl.r),vec3f(.85,.88,.9),max(sp,bar*.6)),top);m.s=vec2f(.25,16.);
+  m.a=mix(vec3f(.72,.74,.74),mix(vec3f(.05,.085,.13)*(.8+.4*cl.r),vec3f(.8,.83,.85),max(sp,bar*.55)),top);m.s=vec2f(.25,16.);
  }else if(mt==14u){ // eel / octopus / crab: tinted mottled skin
   let k=textureSample(tb,ls,i.rp.xz*2.3+i.rp.y*1.7);
   m.a=i.col.rgb*mix(1.,.4,smoothstep(.45,.7,k.r+k.g*.4-.2))*(.75+.4*k.b);m.s=vec2f(.35,20.);

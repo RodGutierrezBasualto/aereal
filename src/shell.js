@@ -6,7 +6,7 @@
   const H = { Q, cv, cur: Q.get('world') == 'sea' ? 1 : 0, T: new Float64Array(1), PU: [new Float32Array(64), new Float32Array(64)], snapView: null };
   H.first = H.cur;
   let msg = ['', ''];
-  const show = () => { const locked = document.pointerLockElement === cv, s = msg[H.cur] || (locked || !C[H.cur] ? '' : C[H.cur].help); hud.textContent = s; hud.style.opacity = s ? 1 : 0 };
+  const show = () => { const locked = document.pointerLockElement === cv, c = C[H.cur], s = msg[H.cur] || (locked || !c ? '' : c.help + (c.bench ? '' : '\nHeadphones on for 3D sound  ·  M mute')); hud.textContent = s; hud.style.opacity = s ? 1 : 0 };
   H.say = (s, i) => { msg[i] = s; if (i === H.cur) show() };
   if (!navigator.gpu) return H.say('This scene needs WebGPU.', H.cur);
   const ad = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }); if (!ad) return H.say('No WebGPU adapter found.', H.cur);
@@ -26,6 +26,7 @@
   ];
   // where each world starts: far enough that the portal reads as a destination, facing it
   const START = [[-1189, 200, 1233, .9, 0], [16, -31, 27, -.36, .08]];
+  H.PT = PT; const AU = makeAudio(H);
   for (const p of PT) { p.n = [Math.sin(p.yaw), 0, -Math.cos(p.yaw)]; p.exit = [p.c[0] + p.n[0] * p.R * .9, p.c[1], p.c[2] + p.n[2] * p.R * .9] }
   // shader: a disc framed by a glowing ring; the disc shows the other world's last snapshot, sampled by view direction
   const PS = `
@@ -86,7 +87,7 @@ fn itm(v:vec3f)->vec3f{
 
   // ---- worlds
   const C = [null, null], LD = [null, null];
-  const load = i => LD[i] || (LD[i] = WORLDS[i](H, i).then(c => { C[i] = c; if (!c || !c.bench) msg[i] = ''; if (!c && i === H.cur) show(); if (c && i !== H.cur) snap(i); return c }));
+  const load = i => LD[i] || (LD[i] = WORLDS[i](H, i).then(c => { C[i] = c; if (c && c.audio && !c.bench) AU.add(i, c.audio); if (!c || !c.bench) msg[i] = ''; if (!c && i === H.cur) show(); if (c && i !== H.cur) snap(i); return c }));
   const snap = i => { const p = PT[i]; C[i].place(p.exit[0], p.exit[1], p.exit[2], p.yaw, 0); C[i].snap() };
   const first = await load(H.cur);
   if (!first) { if (CAP && !BENCH) load(1 - H.cur); return } // capture mode: the page is driven through window.__cap
@@ -94,23 +95,23 @@ fn itm(v:vec3f)->vec3f{
   show();
 
   // ---- input (worlds only read keys/mouse while active)
-  cv.addEventListener('click', () => { if (!first.bench) cv.requestPointerLock() });
+  cv.addEventListener('click', () => { if (!first.bench) { cv.requestPointerLock(); AU.start() } });
   document.addEventListener('pointerlockchange', show);
   let busy = 0, cool = 0;
   async function go() { // fade out, swap worlds at the other side's portal, fade in
     if (busy || first.bench) return; busy = 1;
     const to = 1 - H.cur, from = H.cur;
-    fx.className = to ? 'sea' : 'sky'; fx.style.opacity = 1; PQ[0] = 1;
+    fx.className = to ? 'sea' : 'sky'; fx.style.opacity = 1; PQ[0] = 1; AU.transition(to);
     await new Promise(r => setTimeout(r, 480));
     if (!C[to]) { H.say(to ? 'Diving into the sea…' : 'Rising into the sky…', from); await load(to); msg[from] = '' }
     C[from].leave(); snap(from);
     const p = PT[to]; C[to].place(p.exit[0], p.exit[1], p.exit[2], p.yaw, C[to].speed * 1.4);
-    H.cur = to; C[to].enter(); show(); PQ[1] = PQ[2] = 0; cool = performance.now() + 1500;
+    H.cur = to; C[to].enter(); AU.world(to); show(); PQ[1] = PQ[2] = 0; cool = performance.now() + 1500;
     ttl.textContent = C[to].name; ttl.style.opacity = 1; setTimeout(() => ttl.style.opacity = 0, 2600);
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     fx.style.opacity = 0; PQ[0] = 0; busy = 0;
   }
-  addEventListener('keydown', e => { if (e.code == 'KeyP' && !e.repeat) go() });
+  addEventListener('keydown', e => { if (first.bench) return; AU.start(); if (e.code == 'KeyP' && !e.repeat) go(); if (e.code == 'KeyM' && !e.repeat) AU.toggle() });
 
   // ---- frame loop: only the active world renders; crossing its portal disc triggers the switch
   function cross() { // flying into the disc (within .35 R of its plane, getting closer, inside the ring) starts the switch
@@ -118,8 +119,8 @@ fn itm(v:vec3f)->vec3f{
     const s = Math.abs(dx * p.n[0] + dz * p.n[2]), rx = dx * p.n[2] - dz * p.n[0], prev = PQ[1 + i]; PQ[1 + i] = s;
     return !busy && !U[63] && H.T[0] > cool && s < p.R * .35 && s < prev && rx * rx + dy * dy < p.R * p.R * .9;
   }
-  function tick(now) { H.T[0] = now; C[H.cur].tick(); if (cross()) go(); requestAnimationFrame(tick) }
+  function tick(now) { H.T[0] = now; C[H.cur].tick(); if (cross()) go(); AU.tick(); requestAnimationFrame(tick) }
   requestAnimationFrame(tick);
   if (!first.bench) setTimeout(() => load(1 - H.cur), 1500); // grow the other world in the background
-  window.__aereal = { go, C, PT, H };
+  window.__aereal = { go, C, PT, H, AU };
 })();

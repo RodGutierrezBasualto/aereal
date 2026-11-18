@@ -225,15 +225,23 @@ function jellyMesh(r) { // bell (uv.z 0) + tentacles and oral arms (uv.z 1, uv.y
   for (let k = 0; k < 4; k++) { const a = k / 4 * 6.2832 + .4, L = .9 + .3 * r(), P = [], R = []; for (let j = 0; j <= 8; j++) { const t = j / 8; P.push([Math.cos(a) * .08 * (1 + t) + Math.sin(t * 9 + k) * .04, .05 - L * t, Math.sin(a) * .08 * (1 + t) + Math.cos(t * 9 + k) * .04]); R.push(.05 * (1 - t * .6)); } tube(m, P, R, 4, j => [k * 2.1 + .5, j / 8, 1, 16]); }
   m.nrm(0, 0); return m;
 }
-function whaleSharkMesh() { // forward +z, ~1 long
+// thick fin: closed outline P around centre C, thickness th along N (lens-shaped section, edges come to a rounded point via smooth normals)
+function thickFin(m, P, C, N, th, mat) {
+  const v = (p, o) => m.vx(p[0] + N[0] * o, p[1] + N[1] * o, p[2] + N[2] * o, 0, 1, 0, 0, 0, 0, mat), n = P.length, ct = v(C, th), cb = v(C, -th), mt = [], mb = [], o = [];
+  for (const p of P) { const q = [C[0] + (p[0] - C[0]) * .55, C[1] + (p[1] - C[1]) * .55, C[2] + (p[2] - C[2]) * .55]; mt.push(v(q, th * .7)); mb.push(v(q, -th * .7)); o.push(v(p, 0)); }
+  for (let k = 0; k < n; k++) { const j = (k + 1) % n; m.tri(ct, mt[k], mt[j]); m.quad(mt[k], o[k], o[j], mt[j]); m.tri(cb, mb[j], mb[k]); m.quad(mb[j], o[j], o[k], mb[k]); }
+}
+function whaleSharkMesh() { // forward +z, ~1.2 long incl. tail
   const m = new Mesh(), P = [], R = [];
-  for (let k = 0; k <= 12; k++) { const s = k / 12; P.push([0, .015 * Math.sin(s * 3), -.48 + .98 * s]); R.push(.015 + .11 * Math.pow(Math.sin(Math.PI * (.06 + .9 * s)), .7)); }
-  tube(m, P, R, 10, () => [0, 0, 0, 13], true);
-  for (let k = 0; k < m.v.length; k += 10) { const z = m.v[k + 2]; m.v[k] *= 1.15 + .45 * ss(.1, .5, z); m.v[k + 1] *= .82 - .12 * ss(.2, .5, z); }
-  const f = (a, b, c) => { const i = m.v.length / 10; for (const p of [a, b, c]) m.vx(p[0], p[1], p[2], 1, 0, 0, 0, 0, 0, 13); m.tri(i, i + 1, i + 2); };
-  f([0, .03, -.45], [0, .26, -.66], [0, .05, -.53]); f([0, 0, -.45], [0, -.15, -.6], [0, -.02, -.54]);
-  f([0, .09, .05], [0, .24, -.1], [0, .08, -.17]); f([0, .06, -.28], [0, .12, -.35], [0, .04, -.37]);
-  for (const s of [-1, 1]) f([s * .12, -.05, .2], [s * .38, -.12, .02], [s * .12, -.06, .04]);
+  for (let k = 0; k <= 14; k++) { const s = k / 14; P.push([0, .015 * Math.sin(s * 3), -.5 + 1 * s]); R.push(.022 + .105 * Math.pow(Math.sin(Math.PI * (.06 + .9 * s)), .7)); }
+  tube(m, P, R, 12, () => [0, 0, 0, 13], true);
+  { const t = m.vx(0, .005, -.53, 0, 0, -1, 0, 0, 0, 13); for (let j = 0; j < 12; j++) m.tri((j + 1) % 12, j, t); } // close the tail end of the body
+  for (let k = 0; k < m.v.length; k += 10) { const z = m.v[k + 2]; m.v[k] *= (1.15 + .45 * ss(.1, .5, z)) * (1 - .45 * ss(-.2, -.5, z)); m.v[k + 1] *= .82 - .12 * ss(.2, .5, z); } // broad flat head, laterally flattened tail stock
+  const X = [1, 0, 0], Y = [0, 1, 0];
+  thickFin(m, [[0, .04, -.44], [0, .11, -.51], [0, .2, -.6], [0, .31, -.72], [0, .25, -.7], [0, .15, -.64], [0, .07, -.59], [0, .005, -.565], [0, -.05, -.59], [0, -.11, -.625], [0, -.165, -.665], [0, -.12, -.6], [0, -.07, -.53], [0, -.04, -.47]], [0, 0, -.51], X, .022, 13); // crescent caudal fin, upper lobe larger
+  thickFin(m, [[0, .07, .07], [0, .15, .02], [0, .22, -.06], [0, .27, -.13], [0, .2, -.12], [0, .13, -.15], [0, .08, -.18]], [0, .09, -.06], X, .016, 13); // first dorsal
+  thickFin(m, [[0, .05, -.27], [0, .1, -.31], [0, .13, -.36], [0, .08, -.36], [0, .04, -.38]], [0, .06, -.33], X, .01, 13); // second dorsal
+  for (const s of [-1, 1]) thickFin(m, [[s * .12, -.04, .23], [s * .22, -.07, .17], [s * .33, -.11, .07], [s * .4, -.14, -.01], [s * .3, -.11, .02], [s * .2, -.08, .04], [s * .12, -.05, .06]], [s * .17, -.06, .13], Y, .014, 13); // pectorals
   m.nrm(0, 0); return m;
 }
 function eelMesh() { // grows along +y out of the rock (y < 0 stays hidden); uv.z flex

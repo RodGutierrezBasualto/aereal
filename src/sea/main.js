@@ -78,7 +78,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
     U[48] = S[RX]; U[49] = 0; U[50] = S[RZ]; U[51] = FOVT * W / H; U[52] = S[UX]; U[53] = S[UY]; U[54] = S[UZ]; U[55] = FOVT; U[56] = S[FX]; U[57] = S[FY]; U[58] = S[FZ]; U[59] = NEAR;
     dev.queue.writeBuffer(UB, 0, U);
     for (let i = 0; i < 16; i++) { PU[i] = U[i]; U[i] = U[16 + i]; }
-    PU[16] = S[CX]; PU[17] = S[CY]; PU[18] = S[CZ]; PU[19] = S[TIME]; PU[63] = flying ? 1 : 0;
+    PU[16] = S[CX]; PU[17] = S[CY]; PU[18] = S[CZ]; PU[19] = S[TIME]; PU[63] = flying ? 1 : 0; PU[56] = S[FX]; PU[57] = S[FY]; PU[58] = S[FZ];
     dev.queue.writeBuffer(UBS, 0, U);
   }
 
@@ -128,7 +128,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   const nearCam = (x, z, r) => { for (let i = 0; i < AV.length; i += 3)if (Math.hypot(x - AV[i], z - AV[i + 2]) < r) return 1; return 0; };
 
   // ---- world
-  const R = rng(20261117), R0 = R;
+  const R = rng(20261117), R0 = R, AUD = { SC: [] }; // AUD: arrays the audio emitters need
   const TM = gridMesh(TG, 0, [1.5, 4, 9], (x, y, z) => { const t = ss(-36, -26, y), n = fbm(x * .018, 7.3, z * .018, 3); return ss(.53 - .13 * t, .65 - .1 * t, n); });
   const TV = TM.v, NV = TV.length / 10;
   const gy = (x, z) => { let y = -8; while (y > -62 && gs(TG, x, y, z) < 0) y -= .4; return y; };
@@ -242,10 +242,10 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
     const fit = (ax, az, sp, y0, y1, Rx, Ay, Rz, m, R = R0) => { for (let t = 0; t < 400; t++) { const c = [ax + (R() - .5) * sp, y0 + (y1 - y0) * R(), az + (R() - .5) * sp], ph = R() * 6.28; if (ok(c, Rx, Ay, Rz, ph, m)) return [...c, ph]; } return [ax, -8, az, 0]; };
     const FI = [], gau = () => (R() + R() + R() - 1.5) * .9, FCO = [[.12, .42, .95], [1, .5, .1], [.15, .8, .7], [.95, .22, .42], [.95, .85, .25], [.6, .3, 1]];
     [[10, -8, 30, 5.5, 1.2, 5.5, 650, 9, .42], [30, 20, 60, 22, 3, 15, 520, .5, .2], [-40, -30, 60, 18, 2.5, 24, 480, .5, -.19], [84, -58, 40, 20, 3, 13, 520, .55, .17], [-78, 52, 30, 17, 4, 17, 520, .6, -.2], [-10, 80, 80, 26, 3, 18, 420, .45, .15], [120, 40, 90, 24, 3, 20, 420, .5, -.16], [-120, -40, 90, 22, 3, 22, 420, .5, .17]].forEach((s, si) => {
-      const c = fit(s[0], s[1], s[2], -36, -14, s[3] + 3, s[4] + 2, s[5] + 3, 4), col = FCO[si % FCO.length];
+      const c = fit(s[0], s[1], s[2], -36, -14, s[3] + 3, s[4] + 2, s[5] + 3, 4), col = FCO[si % FCO.length]; AUD.SC.push(FI.length / 16);
       for (let i = 0; i < s[6]; i++) { const g = .7 + .5 * R(); FI.push(c[0], c[1], c[2], .32 + .26 * R(), s[3], s[4], s[5], c[3], col[0] * g, col[1] * g, col[2] * g, (R() - .5) * 2 * s[7], gau() * 2.6, gau() * 1.9, s[8], R() * 6.28); }
     });
-    layer(fishMesh(), FI, 'o2none', null);
+    layer(fishMesh(), FI, 'o2none', null); AUD.FI = FI;
     const MA = [];
     [[-78, 52, 0, 21, .085, -21, -21, -4.4], [4, 2, 0, 17, -.09, -17, -17, 2.405], [18, 2, 12, 26, .075, -15, -11], [84, -56, 14, 27, -.07, -27, -20], [-20, -70, 100, 52, .055, -30, -11], [100, 80, 120, 44, .065, -30, -11], [-120, -40, 100, 40, -.06, -30, -11]].forEach(s => {
       const c = fit(s[0], s[1], s[2], s[5], s[6], s[3], 3, s[3], 5.5);
@@ -263,14 +263,14 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
     layer(turtleMesh(), TT, 'o4none', 's4');
     // whale shark: one giant cruising just under the surface (the mesas reach up to ~-6 m; this is the clear loop), ~3 min per lap
     const WS = [60, -4, 0, 14, 70, .5, 70, 0, 0, 0, 0, 2.2, 0, 0, .033, 0];
-    layer(whaleSharkMesh(), WS, 'o6none', 's6');
+    layer(whaleSharkMesh(), WS, 'o6none', 's6'); AUD.WS = WS;
     // jellyfish drifting in the upper water (translucent, drawn late)
     const JE = [], JC = [[.3, .9, 1], [1, .35, .85], [.6, .45, 1], [1, .7, .3], [.35, 1, .6]];
     for (let k = 0, n = 0; k < 5000 && n < 50; k++) {
       const w = n < 32 ? 150 : 320, x = (R() - .5) * w, y = -17 + 11 * R(), z = (R() - .5) * w; if (gs(TG, x, y, z) > -6 || gs(TG, x, y - 3, z) > -3) continue;
       const c = JC[n % JC.length], b = R() * 6.28; JE.push(x, y, z, .55 + .45 * R(), ...qax(Math.cos(b), 0, Math.sin(b), .25 * R()), c[0], c[1], c[2], R() * 6.28, 2 + 3 * R(), .9 + .5 * R(), 0, R() * 6.28); n++;
     }
-    layer(jellyMesh(rng(81)), JE, 'j5', null, 0, 0, 1);
+    layer(jellyMesh(rng(81)), JE, 'j5', null, 0, 0, 1); AUD.JE = JE;
     // eels peeking out of crevices (slide in and out), an octopus on the wreck deck
     const EE = [];
     for (let k = 0, n = 0; k < 300000 && n < 40; k++) {
@@ -291,7 +291,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
       if (n % 3 == 0) for (let f = 0, nf = 2 + (R() * 3 | 0); f < nf; f++) { const r = .45 + .3 * R(); CF.push(p[0], p[1] + .5 * s, p[2], .11 + .05 * R(), r, .12, r, R() * 6.28, 1, .42 + .2 * R(), .06, R() * 6.28, 0, 0, (R() < .5 ? -1 : 1) * (1.2 + .8 * R()), R() * 6.28); }
     }
     for (let n = 0; n < 70; n++) { const p = spot(.85, 110); if (!p) break; const c = [[.85, .35, .18], [.75, .5, .3], [.9, .25, .2]][n % 3]; CB.push(p[0], p[1] + .02, p[2], .26 + .14 * R(), ...p[3], c[0], c[1], c[2], R() * 6.28, .12, 7 + 3 * R(), 2, -(.25 + .3 * R())); }
-    layer(starfishMesh(), SF, 'o0none', null, 60); layer(anemoneMesh(rng(91)), AN, 'o1none', null, 60); layer(crabMesh(), CB, 'o7none', null, 50); layer(fishMesh(), CF, 'o2none', null);
+    layer(starfishMesh(), SF, 'o0none', null, 60); layer(anemoneMesh(rng(91)), AN, 'o1none', null, 60); layer(crabMesh(), CB, 'o7none', null, 50); AUD.CB = CB; layer(fishMesh(), CF, 'o2none', null);
     }
   }
   // sprites
@@ -300,6 +300,24 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   for (let v = 0; v < 22; v++) { const o = (R() * NV | 0) * 10; if (TV[o + 4] < .8 || TV[o + 1] > -30 || Math.hypot(TV[o], TV[o + 2]) > 150) { v--; continue; } for (let i = 0; i < 70; i++)BUB.push(TV[o], TV[o + 1], TV[o + 2], .025 + .06 * R(), R() * 2 - 1, R() * 2 - 1, R(), R()); }
   const SNO = []; for (let i = 0; i < 7000; i++) { const b = .25 + .5 * R(); SNO.push(R() * 44, R() * 44, R() * 44, .012 + .02 * R(), b * .55, b * .85, b, R()); }
   const PTS = [[PP.p1, SNO], [PP.p0, SPK], [PP.p2, BUB]].map(([p, a]) => ({ p, b: buf(new Float32Array(a), BU.VERTEX), n: a.length / 8 }));
+
+  // ---- audio emitters (types in audio.js: 10 bubble vent, 11 wreck, 12 jellyfish, 13 whale shark, 14 fish school, 15 crab); positions mirror the shaders
+  const AE = [];
+  for (let i = 0; i < BUB.length; i += 8) if (!i || Math.abs(BUB[i] - BUB[i - 8]) + Math.abs(BUB[i + 2] - BUB[i - 6]) > .01) AE.push(10, i);
+  AE.push(11, 0); for (let i = 0; i < AUD.JE.length / 16; i++) AE.push(12, i); AE.push(13, 0); for (const s of AUD.SC) AE.push(14, s); for (let i = 0; i < AUD.CB.length / 16; i++) AE.push(15, i);
+  const NE = AE.length / 2, ET = new Uint8Array(NE), EI = new Int32Array(NE), EP = new Float64Array(NE * 3), EA = new Float32Array(NE);
+  for (let e = 0; e < NE; e++) { ET[e] = AE[e * 2]; EI[e] = AE[e * 2 + 1]; }
+  function atick(t, cx, cy, cz) {
+    for (let e = 0; e < NE; e++) {
+      const ty = ET[e], o = EI[e]; let x, y, z, a = 0;
+      if (ty == 10) { x = BUB[o]; y = BUB[o + 1]; z = BUB[o + 2]; }
+      else if (ty == 11) { x = SHP[0]; y = SHP[1]; z = SHP[2]; }
+      else if (ty == 12) { const J = AUD.JE, b = o * 16; x = J[b] + Math.sin(t * .035 + J[b + 11]) * J[b + 12]; y = J[b + 1] + Math.sin(t * .13 + J[b + 11] * 2) * 1.2; z = J[b + 2] + Math.cos(t * .03 + J[b + 11] * 1.3) * J[b + 12]; }
+      else if (ty <= 14) { const F = ty == 13 ? AUD.WS : AUD.FI, b = o * 16, p = F[b + 11] + t * F[b + 14]; x = F[b] + F[b + 4] * Math.cos(p); y = F[b + 1] + F[b + 5] * Math.sin(2 * p + F[b + 7]); z = F[b + 2] + F[b + 6] * Math.sin(p); if (ty == 14) a = 1 - ss(0, 7, Math.hypot(x - cx, y - cy, z - cz)); }
+      else { const C = AUD.CB, b = o * 16; x = C[b]; y = C[b + 1]; z = C[b + 2]; }
+      EP[e * 3] = x; EP[e * 3 + 1] = y; EP[e * 3 + 2] = z; EA[e] = a;
+    }
+  }
 
   // ---- culling grid
   const NCC = NC * NC, cdist = new Float32Array(NCC), cin = new Uint8Array(NCC), ccx = new Float32Array(NCC), ccz = new Float32Array(NCC);
@@ -456,7 +474,7 @@ const main = async (HO, WI) => { // HO = shared host: device, canvas, portal; WI
   if (BENCH) rec = 1;
   S[T0] = 0; pose(0); S[LAST] = performance.now(); S[TOFF] = -S[LAST] / 1000;
   return {
-    name: 'Kelp Sanctum', help: HELP, tanY: FOVT, bench: BENCH, speed: 9, tick: frame,
+    name: 'Kelp Sanctum', help: HELP, audio: { n: NE, T: ET, P: EP, A: EA, tick: atick, ref: 3.5 }, tanY: FOVT, bench: BENCH, speed: 9, tick: frame,
     place(x, y, z, yaw, v, pit = 0) { S[CX] = x; S[CY] = y; S[CZ] = z; S[YAW] = yaw; S[PIT] = pit; flying = false; S[VX] = Math.sin(yaw) * v; S[VY] = 0; S[VZ] = -Math.cos(yaw) * v; },
     enter() { resize(); S[LAST] = performance.now(); }, leave() { K.fill(0); },
     snap() { HO.snapView = HO.peek(WI, W, H); S[TIME] = performance.now() / 1000 + S[TOFF]; draw(); HO.snapView = null; }
